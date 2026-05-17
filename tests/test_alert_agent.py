@@ -25,6 +25,7 @@ def test_run_fires_alert_above_threshold(monkeypatch):
 
     mock_post.assert_called_once()
     assert result['alerts_fired'] == ['BBC']
+    assert result['drift_detected'] == ['BBC']
 
 
 def test_run_skips_below_threshold(monkeypatch):
@@ -39,9 +40,11 @@ def test_run_skips_below_threshold(monkeypatch):
 
     mock_post.assert_not_called()
     assert result['alerts_fired'] == []
+    assert result['drift_detected'] == []
 
 
 def test_run_handles_missing_webhook_url(monkeypatch):
+    """When no webhook is configured: drift is detected but no alert is fired."""
     monkeypatch.delenv('WEBHOOK_URL', raising=False)
     state = {
         'job_id': 'job-003',
@@ -52,10 +55,12 @@ def test_run_handles_missing_webhook_url(monkeypatch):
         result = run(state)
 
     mock_post.assert_not_called()
-    assert result['alerts_fired'] == ['CNN']
+    assert result['alerts_fired'] == []        # no webhook → no POST attempted
+    assert result['drift_detected'] == ['CNN'] # still above threshold
 
 
 def test_run_handles_post_exception(monkeypatch):
+    """Webhook is configured but POST fails — outlet still counted in alerts_fired (attempt was made)."""
     monkeypatch.setenv('WEBHOOK_URL', 'https://hooks.example.com/alerts')
     state = {
         'job_id': 'job-004',
@@ -66,6 +71,7 @@ def test_run_handles_post_exception(monkeypatch):
         result = run(state)
 
     assert result['alerts_fired'] == ['RT']
+    assert result['drift_detected'] == ['RT']
 
 
 def test_run_payload_shape(monkeypatch):
@@ -96,3 +102,4 @@ def test_run_with_empty_scored_list(monkeypatch):
 
     mock_post.assert_not_called()
     assert result['alerts_fired'] == []
+    assert result['drift_detected'] == []

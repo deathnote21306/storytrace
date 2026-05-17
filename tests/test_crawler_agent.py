@@ -2,6 +2,8 @@ from unittest.mock import MagicMock, patch
 
 from agents.crawler_agent import (
     WORD_CAP,
+    _is_safe_url,
+    _strip_html,
     entity_match,
     fetch_first_300_words,
     run,
@@ -13,19 +15,57 @@ def test_entity_match_case_insensitive():
     assert entity_match('Local Weather Update', ['iran']) is False
 
 
+def test_strip_html_removes_tags():
+    assert 'script' not in _strip_html('<script>alert(1)</script>Iran deal')
+    assert 'Iran deal' in _strip_html('<p>Iran deal</p>')
+
+
+def test_is_safe_url_allows_public_domains():
+    assert _is_safe_url('https://bbc.co.uk/news') is True
+    assert _is_safe_url('http://example.com/page') is True
+
+
+def test_is_safe_url_blocks_private_ips():
+    assert _is_safe_url('http://192.168.1.1/secret') is False
+    assert _is_safe_url('http://10.0.0.1/internal') is False
+    assert _is_safe_url('http://127.0.0.1/admin') is False
+
+
+def test_is_safe_url_blocks_non_http_schemes():
+    assert _is_safe_url('file:///etc/passwd') is False
+    assert _is_safe_url('ftp://example.com/file') is False
+
+
 def test_fetch_first_300_words_caps_at_300():
     long_text = ' '.join(['word'] * 500)
     mock_resp = MagicMock()
     mock_resp.text = long_text
+    mock_resp.raise_for_status = MagicMock()
     with patch('agents.crawler_agent.requests.get', return_value=mock_resp):
         result = fetch_first_300_words('https://example.com/article')
     assert result is not None
     assert len(result.split()) <= WORD_CAP
 
 
+def test_fetch_first_300_words_strips_html():
+    mock_resp = MagicMock()
+    mock_resp.text = '<html><body><p>Iran nuclear deal</p></body></html>'
+    mock_resp.raise_for_status = MagicMock()
+    with patch('agents.crawler_agent.requests.get', return_value=mock_resp):
+        result = fetch_first_300_words('https://example.com/article')
+    assert result is not None
+    assert '<' not in result
+    assert 'Iran nuclear deal' in result
+
+
 def test_fetch_first_300_words_returns_none_on_exception():
     with patch('agents.crawler_agent.requests.get', side_effect=Exception('timeout')):
         result = fetch_first_300_words('https://example.com/article')
+    assert result is None
+
+
+def test_fetch_first_300_words_blocks_ssrf():
+    result = fetch_first_300_words('http://169.254.169.254/latest/meta-data/')
     assert result is None
 
 

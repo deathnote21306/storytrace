@@ -1,3 +1,7 @@
+import ipaddress
+import re
+from urllib.parse import urlparse
+
 import feedparser
 import requests
 
@@ -23,6 +27,28 @@ RSS_FEEDS = {
     'TASS':           'https://tass.com/rss/v2.xml',
 }
 
+_TAG_RE = re.compile(r'<[^>]+>')
+
+
+def _strip_html(text: str) -> str:
+    return _TAG_RE.sub(' ', text)
+
+
+def _is_safe_url(url: str) -> bool:
+    """Block non-HTTP schemes and RFC-1918 / loopback / link-local addresses (SSRF guard)."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        host = parsed.hostname or ''
+        try:
+            addr = ipaddress.ip_address(host)
+            return addr.is_global and not addr.is_private
+        except ValueError:
+            return bool(host)  # domain name — assume safe
+    except Exception:
+        return False
+
 
 def entity_match(headline: str, entities: list[str]) -> bool:
     h = headline.lower()
@@ -30,13 +56,16 @@ def entity_match(headline: str, entities: list[str]) -> bool:
 
 
 def fetch_first_300_words(url: str) -> str | None:
+    if not _is_safe_url(url):
+        return None
     try:
         r = requests.get(
             url,
             timeout=FETCH_TIMEOUT_SECS,
             headers={'User-Agent': 'StoryTrace/1.0'},
         )
-        words = r.text.split()[:WORD_CAP]
+        r.raise_for_status()
+        words = _strip_html(r.text).split()[:WORD_CAP]
         return ' '.join(words)
     except Exception:
         return None
