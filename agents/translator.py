@@ -9,8 +9,9 @@ def _get_client() -> genai.Client:
 
 
 def translate_to_english(text: str) -> str:
-    r = _get_client().models.generate_content(
-        model='gemini-1.5-flash',
+    client = _get_client()  # keep reference alive for the duration of the request
+    r = client.models.generate_content(
+        model='gemini-2.0-flash',
         contents=(
             'Translate this news article to English. Preserve the tone and framing exactly. '
             'Do not add commentary. Return only the translated text.\n\n' + text
@@ -23,9 +24,12 @@ def run(state: dict) -> dict:
     for art in state.get('articles', []):
         try:
             lang = detect(art['text'])
-            if lang != 'en':
-                art['text'] = translate_to_english(art['text'])
-                art['language'] = lang
         except LangDetectException:
-            pass
+            continue
+        if lang != 'en':
+            art['language'] = lang
+            try:
+                art['text'] = translate_to_english(art['text'])
+            except Exception:
+                pass  # leave in original language if Gemini fails
     return state

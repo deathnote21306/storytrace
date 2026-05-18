@@ -42,8 +42,9 @@ def run(story: dict) -> dict:
         text=root.get('text', '')[:1500],
     )
     try:
-        r = _get_client().models.generate_content(
-            model='gemini-1.5-pro',
+        client = _get_client()  # keep reference alive for the duration of the request
+        r = client.models.generate_content(
+            model='gemini-2.5-pro',
             contents=prompt,
         )
         raw = r.text.strip().replace('```json', '').replace('```', '')
