@@ -59,6 +59,7 @@ def query_newsapi(query: str) -> dict | None:
             'q':        query,
             'sortBy':   'publishedAt',
             'pageSize': 1,
+            'language': 'en',
             'apiKey':   api_key,
         }, timeout=10)
         articles = r.json().get('articles', [])
