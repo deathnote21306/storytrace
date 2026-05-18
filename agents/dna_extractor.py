@@ -5,7 +5,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 
-MODEL = 'mistralai/Mistral-7B-Instruct-v0.3'
+MODELS = [
+    'Qwen/Qwen2.5-7B-Instruct',
+    'Qwen/Qwen2.5-3B-Instruct',
+    'microsoft/Phi-3-mini-4k-instruct',
+]
 
 PROMPT = """You are a journalism analyst. Extract the following from the article below.
 Return ONLY valid JSON — no explanation, no markdown, just the JSON object.
@@ -42,32 +46,34 @@ def _get_client() -> OpenAI:
 
 
 def extract_dna(article_text: str, root_text: str) -> dict:
-    try:
-        client = _get_client()
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[{
-                'role':    'user',
-                'content': PROMPT.format(
-                    root_text=root_text[:500],
-                    article_text=article_text[:800],
-                ),
-            }],
-            temperature=0.1,
-            max_tokens=400,
-            timeout=15,
-        )
-        raw = response.choices[0].message.content.strip()
-        raw = raw.replace('```json', '').replace('```', '').strip()
-        return json.loads(raw)
-    except Exception:
-        return copy.deepcopy(_FALLBACK_DNA)
+    client = _get_client()
+    content = PROMPT.format(root_text=root_text[:500], article_text=article_text[:800])
+    for model in MODELS:
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{'role': 'user', 'content': content}],
+                temperature=0.1,
+                max_tokens=400,
+                timeout=15,
+            )
+            raw = response.choices[0].message.content.strip()
+            raw = raw.replace('```json', '').replace('```', '').strip()
+            return json.loads(raw)
+        except Exception:
+            continue
+    return copy.deepcopy(_FALLBACK_DNA)
 
 
 def run(state: dict) -> dict:
     root = state.get('root', {})
     root_text = root.get('text') or root.get('headline', '')
     articles = state.get('articles', [])
+
+    # Extract root DNA so drift_scorer has facts to compare against
+    if root_text and not root.get('dna', {}).get('facts_kept'):
+        root['dna'] = extract_dna(root_text, root_text)
+        state['root'] = root
 
     results = [None] * len(articles)
     with ThreadPoolExecutor(max_workers=6) as executor:
