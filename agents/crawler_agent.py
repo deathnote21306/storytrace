@@ -4,36 +4,46 @@ import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urlparse
+from urllib.parse import quote_plus, urlparse
 
 import feedparser
 import requests
-from google import genai
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
+
+_FEATHERLESS_MODEL = 'Qwen/Qwen2.5-7B-Instruct'
 
 MAX_ENTRIES_PER_FEED = 20
 MAX_CANDIDATES_PER_OUTLET = 3
 WORD_CAP = 300
 FETCH_TIMEOUT_SECS = 5
 
+# Outlet → site domain. Used to build Google News RSS search queries (keyword + site filter)
+# so each fetch is keyword-scoped at the source instead of pulling the full latest feed.
 RSS_FEEDS = {
-    'BBC':            'http://feeds.bbci.co.uk/news/rss.xml',
-    'Al Jazeera':     'https://www.aljazeera.com/xml/rss/all.xml',
-    'Dawn':           'https://www.dawn.com/feed',
-    'CNN':            'http://rss.cnn.com/rss/edition.rss',
-    'RT':             'https://www.rt.com/rss/news/',
-    'Times of India': 'https://timesofindia.indiatimes.com/rssfeeds/296589292.cms',
-    'Guardian':       'https://www.theguardian.com/world/rss',
-    'Fox News':       'https://moxie.foxnews.com/google-publisher/world.xml',
-    'DW':             'https://rss.dw.com/xml/rss-en-all',
-    'France24':       'https://www.france24.com/en/rss',
-    'NDTV':           'https://feeds.feedburner.com/ndtvnews-world-news',
-    'Arab News':      'https://www.arabnews.com/rss.xml',
-    'Sputnik':        'https://sputniknews.com/export/rss2/world/index.xml',
-    'NHK':            'https://www3.nhk.or.jp/rss/news/cat6.xml',
-    'TASS':           'https://tass.com/rss/v2.xml',
+    'BBC':            'bbc.com',
+    'Al Jazeera':     'aljazeera.com',
+    'Dawn':           'dawn.com',
+    'CNN':            'cnn.com',
+    'RT':             'rt.com',
+    'Times of India': 'timesofindia.indiatimes.com',
+    'Guardian':       'theguardian.com',
+    'Fox News':       'foxnews.com',
+    'DW':             'dw.com',
+    'France24':       'france24.com',
+    'NDTV':           'ndtv.com',
+    'Arab News':      'arabnews.com',
+    'Sputnik':        'sputniknews.com',
+    'NHK':            'nhk.or.jp',
+    'TASS':           'tass.com',
 }
+
+
+def _build_search_url(domain: str, keyword: str) -> str:
+    """Google News RSS search URL filtered to one outlet's domain."""
+    q = quote_plus(f'{keyword} site:{domain}')
+    return f'https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en'
 
 _TAG_RE = re.compile(r'<[^>]+>')
 
@@ -79,15 +89,18 @@ def fetch_first_300_words(url: str) -> str | None:
         return None
 
 
-def _get_gemini_client() -> genai.Client:
-    return genai.Client(api_key=os.environ.get('GEMINI_API_KEY', ''))
+def _get_featherless_client() -> OpenAI:
+    return OpenAI(
+        base_url='https://api.featherless.ai/v1',
+        api_key=os.environ.get('FEATHERLESS_API_KEY', ''),
+    )
 
 
 def _build_search_context(root: dict) -> dict:
-    """Extract search keywords and a story fingerprint from the root article via Gemini Flash.
+    """Extract one subject keyword and a story fingerprint from the root article.
 
-    Returns {'keywords': [...], 'summary': '...'}.
-    Returns {} on any failure — callers fall back to spaCy entities.
+    Returns {'keyword': str, 'summary': str}.
+    Returns {} on any failure — callers fall back to the first spaCy entity.
     """
     headline = root.get('headline', '')
     text = root.get('text', '')
@@ -96,37 +109,43 @@ def _build_search_context(root: dict) -> dict:
         return {}
     prompt = (
         'You are helping a news monitoring system find related articles across outlets.\n\n'
-        'Given this root news story, extract:\n'
-        '1. 8-12 specific keywords/phrases that identify articles covering the SAME event\n'
-        '   (include key names, places, organizations, and unique event descriptors;\n'
-        '    include common alternative phrasings — e.g. "Washington" for "United States")\n'
-        '2. A one-sentence summary of exactly what happened\n\n'
+        'Given this root news story, identify:\n'
+        '1. The single most specific and identifying word or short phrase (2-3 words max) '
+        'that uniquely describes what this story is about — the core subject.\n'
+        '   Choose something that any outlet covering the SAME event would also use '
+        '(e.g. a proper name, location, or unique event term — NOT a generic word like "attack" or "talks").\n'
+        '2. A one-sentence summary of exactly what happened.\n\n'
         'Return ONLY valid JSON, no markdown:\n'
-        '{"keywords": ["keyword1", "keyword2", ...], "summary": "one sentence"}\n\n'
+        '{"keyword": "the single subject term", "summary": "one sentence"}\n\n'
         f'HEADLINE: {headline}\n'
         f'TEXT: {text[:600]}'
     )
     try:
-        client = _get_gemini_client()
-        r = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-        raw = r.text.strip().replace('```json', '').replace('```', '').strip()
+        client = _get_featherless_client()
+        resp = client.chat.completions.create(
+            model=_FEATHERLESS_MODEL,
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.1,
+            max_tokens=120,
+        )
+        raw = resp.choices[0].message.content.strip().replace('```json', '').replace('```', '').strip()
         result = json.loads(raw)
-        logger.info('Search context built: %d keywords — "%s"',
-                    len(result.get('keywords', [])), result.get('summary', '')[:80])
+        logger.info('Search context built: keyword="%s" — "%s"',
+                    result.get('keyword', ''), result.get('summary', '')[:80])
         return result
     except Exception as exc:
         logger.warning('_build_search_context LLM call failed, falling back to entities: %s', exc)
         return {}
 
 
-def _candidate_score(entry, keywords: list[str]) -> int:
-    """Count keyword hits across headline + RSS summary/description."""
+def _candidate_score(entry, keyword: str) -> bool:
+    """Return True if the subject keyword appears in headline + RSS summary/description."""
     combined = (
         entry.get('title', '') + ' ' +
         entry.get('summary', '') + ' ' +
         entry.get('description', '')
     ).lower()
-    return sum(1 for kw in keywords if kw.lower() in combined)
+    return keyword.lower() in combined
 
 
 def _score_relevance_batch(root_summary: str, candidates: list[dict]) -> list[bool]:
@@ -153,9 +172,14 @@ def _score_relevance_batch(root_summary: str, candidates: list[dict]) -> list[bo
         '[true, false, ...]'
     )
     try:
-        client = _get_gemini_client()
-        r = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-        raw = r.text.strip().replace('```json', '').replace('```', '').strip()
+        client = _get_featherless_client()
+        resp = client.chat.completions.create(
+            model=_FEATHERLESS_MODEL,
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.1,
+            max_tokens=200,
+        )
+        raw = resp.choices[0].message.content.strip().replace('```json', '').replace('```', '').strip()
         result = json.loads(raw)
         if isinstance(result, list) and len(result) == len(candidates):
             relevant_count = sum(result)
@@ -169,25 +193,29 @@ def _score_relevance_batch(root_summary: str, candidates: list[dict]) -> list[bo
 
 
 def _fetch_outlet_candidates(
-    outlet: str, feed_url: str, keywords: list[str], entities: list[str]
+    outlet: str, domain: str, keyword: str, entities: list[str]
 ) -> list[dict]:
-    """Return up to MAX_CANDIDATES_PER_OUTLET best-scoring entries for one RSS feed.
+    """Search the outlet's articles for the subject keyword via Google News RSS.
 
-    Scores entries by keyword hits in headline + RSS description.
-    Entity hits get a +2 bonus to preserve backward-compatible matching.
+    The keyword is part of the fetch URL (Google News `site:` filter), so results
+    are pre-scoped to this outlet AND this story before any local scoring runs.
+    A final keyword/entity check guards against weak matches.
     Does NOT fetch full article text — that happens only for LLM-confirmed articles.
     """
+    feed_url = _build_search_url(domain, keyword)
     try:
         feed = feedparser.parse(feed_url)
-        scored: list[tuple[int, object]] = []
+        matches = []
         for entry in feed.entries[:MAX_ENTRIES_PER_FEED]:
-            kw_score = _candidate_score(entry, keywords)
+            kw_hit = _candidate_score(entry, keyword)
             entity_hit = entity_match(entry.get('title', ''), entities)
-            if kw_score > 0 or entity_hit:
-                scored.append((kw_score + (2 if entity_hit else 0), entry))
-        scored.sort(key=lambda x: x[0], reverse=True)
+            if kw_hit or entity_hit:
+                # keyword hit scores 1, entity hit adds 1 bonus — entity alone = 1
+                score = (1 if kw_hit else 0) + (1 if entity_hit else 0)
+                matches.append((score, entry))
+        matches.sort(key=lambda x: x[0], reverse=True)
         result = []
-        for _, entry in scored[:MAX_CANDIDATES_PER_OUTLET]:
+        for _, entry in matches[:MAX_CANDIDATES_PER_OUTLET]:
             rss_summary = _strip_html(entry.get('summary', '') or entry.get('description', ''))
             result.append({
                 'outlet':      outlet,
@@ -197,10 +225,10 @@ def _fetch_outlet_candidates(
                 'language':    'en',
             })
         if result:
-            logger.debug('%s: %d candidate(s) — top: "%s"',
-                         outlet, len(result), result[0]['headline'][:70])
+            logger.debug('%s: %d candidate(s) for keyword="%s" — top: "%s"',
+                         outlet, len(result), keyword, result[0]['headline'][:70])
         else:
-            logger.debug('%s: no matching entries in feed', outlet)
+            logger.debug('%s: no results for keyword="%s"', outlet, keyword)
         return result
     except Exception as exc:
         logger.warning('%s: feed parse failed: %s', outlet, exc)
@@ -214,25 +242,23 @@ def run(state: dict) -> dict:
 
     logger.info('[%s] crawler_agent started — entities: %s', job_id, entities)
 
-    # Step 1: LLM-generated search context — richer keywords + story fingerprint
+    # Step 1: LLM-generated search context — single subject keyword + story fingerprint
     search_ctx = _build_search_context(root)
-    keywords: list[str] = search_ctx.get('keywords') or entities
+    keyword: str = search_ctx.get('keyword') or (entities[0] if entities else '')
     root_summary: str = search_ctx.get('summary') or root.get('headline', '')
 
-    if not keywords and not entities:
-        logger.warning('[%s] crawler_agent: no keywords or entities, skipping crawl', job_id)
+    if not keyword:
+        logger.warning('[%s] crawler_agent: no keyword or entities, skipping crawl', job_id)
         state['articles'] = []
         return state
 
-    logger.info('[%s] Crawling %d feeds with %d keyword(s)',
-                job_id, len(RSS_FEEDS), len(keywords))
-
-    # Step 2: Parallel RSS fetch — collect top candidates per outlet, no full-text yet
+    logger.info('[%s] Searching %d outlets with keyword="%s"', job_id, len(RSS_FEEDS), keyword)
+    # Step 2: Parallel keyword-scoped fetch (one Google News search per outlet, no full-text yet)
     all_candidates: list[dict] = []
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {
-            executor.submit(_fetch_outlet_candidates, outlet, url, keywords, entities): outlet
-            for outlet, url in RSS_FEEDS.items()
+            executor.submit(_fetch_outlet_candidates, outlet, domain, keyword, entities): outlet
+            for outlet, domain in RSS_FEEDS.items()
         }
         for future in as_completed(futures):
             try:
