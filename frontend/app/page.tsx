@@ -11,7 +11,10 @@ export default function Home() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!input.trim()) return
+    if (!input.trim()) {
+      setError('Please enter a topic or URL')
+      return
+    }
     setLoading(true)
     setError('')
 
@@ -54,7 +57,7 @@ export default function Home() {
         <VoiceInput onTranscript={(t: string) => setInput(prev => (prev + ' ' + t).trim())} />
         <button
           type="submit"
-          disabled={loading || !input.trim()}
+          disabled={loading}
           className="bg-[#1B3A6B] text-white px-6 py-3 rounded-lg text-sm font-semibold hover:bg-[#2E5FA3] disabled:opacity-50 transition-colors"
         >
           {loading ? 'Analyzing…' : 'Trace'}

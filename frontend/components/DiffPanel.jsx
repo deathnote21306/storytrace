@@ -1,7 +1,15 @@
 'use client'
 
 export default function DiffPanel({ node, root }) {
-  if (!node || !node.dna) return null
+  if (!node) {
+    return (
+      <div className="bg-gray-50 border border-dashed border-gray-200 rounded-lg p-6 mt-4 text-center text-gray-400 text-sm">
+        Click a node to see facts diff
+      </div>
+    )
+  }
+
+  if (!node.dna) return null
 
   const rootFacts = new Set(root?.dna?.facts_kept || [])
   const nodeFacts = new Set(node.dna.facts_kept || [])
