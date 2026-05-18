@@ -10,7 +10,7 @@ from backend.orchestrator import run_pipeline
 
 
 def test_full_pipeline():
-    result = run_pipeline('test-job-001', 'Iran nuclear talks')
+    result = run_pipeline('test-job-001', 'Russia Ukraine war')
 
     assert result.get('root') is not None, 'root story not found'
     assert isinstance(result.get('scored_list'), list), 'scored_list missing'
