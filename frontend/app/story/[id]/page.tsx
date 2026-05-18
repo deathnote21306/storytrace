@@ -4,7 +4,7 @@ import DriftTree from '@/components/DriftTree'
 import DiffPanel from '@/components/DiffPanel'
 
 type StoryState =
-  | { status: 'processing'; progress?: number; message?: string }
+  | { status: 'processing'; message?: string }
   | { status: 'complete'; root: Record<string, unknown>; tree: Record<string, unknown> }
   | { status: 'error'; message: string }
 
@@ -16,10 +16,11 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
     let timer: ReturnType<typeof setTimeout>
+    const controller = new AbortController()
 
     async function poll() {
       try {
-        const res = await fetch(`${apiUrl}/story/${id}`)
+        const res = await fetch(`${apiUrl}/story/${id}`, { signal: controller.signal })
         if (!res.ok) {
           setStory({ status: 'error', message: `Server error: ${res.status}` })
           return
@@ -29,13 +30,18 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
         if (data.status === 'processing') {
           timer = setTimeout(poll, 3000)
         }
-      } catch {
-        setStory({ status: 'error', message: 'Could not reach the API' })
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setStory({ status: 'error', message: 'Could not reach the API' })
+        }
       }
     }
 
     poll()
-    return () => clearTimeout(timer)
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+    }
   }, [id])
 
   if (!story) {
@@ -43,12 +49,7 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
   }
 
   if (story.status === 'processing') {
-    return (
-      <Spinner
-        message={story.message || 'Analyzing…'}
-        progress={story.progress}
-      />
-    )
+    return <Spinner message={story.message || 'Analyzing…'} />
   }
 
   if (story.status === 'error') {
@@ -73,14 +74,11 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
   )
 }
 
-function Spinner({ message, progress }: { message: string; progress?: number }) {
+function Spinner({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[80vh] gap-4 text-gray-500">
       <div className="w-10 h-10 border-4 border-[#1B3A6B] border-t-transparent rounded-full animate-spin" />
       <p className="text-sm">{message}</p>
-      {progress !== undefined && (
-        <p className="text-xs text-gray-400">Step {progress} / 7</p>
-      )}
     </div>
   )
 }
