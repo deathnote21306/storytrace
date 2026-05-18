@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 OUTLET_COUNTRY = {
     'BBC':            'UK',
     'Guardian':       'UK',
@@ -20,10 +24,16 @@ OUTLET_COUNTRY = {
 
 def run(state: dict) -> dict:
     root = state.get('root', {})
+    scored_list = state.get('scored_list', [])
+    job_id = state.get('job_id', '?')
+
+    logger.info('[%s] geo_builder started — building tree from %d article(s)', job_id, len(scored_list))
 
     # write country back into each scored article so DB has real country names
-    for art in state.get('scored_list', []):
+    for art in scored_list:
         art['country'] = OUTLET_COUNTRY.get(art['outlet'], 'Other')
+        if art['country'] == 'Other':
+            logger.debug('[%s] Unknown outlet "%s" mapped to country "Other"', job_id, art['outlet'])
 
     tree = {
         'id':          'root',
@@ -37,7 +47,7 @@ def run(state: dict) -> dict:
     }
 
     by_country: dict[str, list] = {}
-    for art in state.get('scored_list', []):
+    for art in scored_list:
         country = art['country']
         by_country.setdefault(country, []).append({
             'id':          f"node-{art['outlet'].replace(' ', '-')}",
@@ -61,8 +71,11 @@ def run(state: dict) -> dict:
             'drift_score': avg_drift,
             'children':    nodes,
         })
+        logger.debug('[%s] Branch "%s": %d node(s), avg drift=%d', job_id, country, len(nodes), avg_drift)
 
     tree['children'].sort(key=lambda b: b['drift_score'])
 
+    logger.info('[%s] geo_builder done — %d country branch(es), %d total nodes',
+                job_id, len(by_country), len(scored_list))
     state['tree'] = tree
     return state

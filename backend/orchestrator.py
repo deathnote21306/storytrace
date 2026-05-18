@@ -1,8 +1,12 @@
+import logging
+
 from langgraph.graph import StateGraph, END
 from agents import (
     seed_agent, crawler_agent, translator,
     dna_extractor, drift_scorer, geo_builder, alert_agent,
 )
+
+logger = logging.getLogger(__name__)
 
 # Contract: the Translator mutates state['articles'] in-place (updates art['text'] and
 # art['language'] on each dict directly). The DNA Extractor then reads the already-translated
@@ -43,8 +47,15 @@ pipeline = build_pipeline()
 
 
 def run_pipeline(job_id: str, user_input: str) -> dict:
+    logger.info('[%s] Pipeline starting — input: "%s"', job_id, user_input[:120])
     initial_state = {
         'job_id': job_id,
         'input':  user_input,
     }
-    return pipeline.invoke(initial_state)
+    result = pipeline.invoke(initial_state)
+    if result.get('error'):
+        logger.error('[%s] Pipeline completed with error: %s', job_id, result['error'])
+    else:
+        article_count = len(result.get('scored_list', []))
+        logger.info('[%s] Pipeline complete — %d article(s) scored', job_id, article_count)
+    return result

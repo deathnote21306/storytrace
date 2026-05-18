@@ -1,7 +1,10 @@
 import json
+import logging
 import os
 
 from google import genai
+
+logger = logging.getLogger(__name__)
 
 
 PROMPT = """You are a geopolitical risk analyst. Analyze this news event and provide a structured impact forecast.
@@ -37,8 +40,13 @@ def _get_client() -> genai.Client:
 
 def run(story: dict) -> dict:
     root = story.get('root', {})
+    job_id = story.get('job_id', '?')
+    headline = root.get('headline', '')
+
+    logger.info('[%s] forecast_agent started — headline: "%s"', job_id, headline[:80])
+
     prompt = PROMPT.format(
-        headline=root.get('headline', ''),
+        headline=headline,
         text=root.get('text', '')[:1500],
     )
     try:
@@ -48,6 +56,10 @@ def run(story: dict) -> dict:
             contents=prompt,
         )
         raw = r.text.strip().replace('```json', '').replace('```', '')
-        return json.loads(raw)
-    except Exception as e:
-        return {'error': str(e)}
+        result = json.loads(raw)
+        logger.info('[%s] forecast_agent done — event_type=%s, %d countries',
+                    job_id, result.get('event_type'), len(result.get('countries', [])))
+        return result
+    except Exception as exc:
+        logger.error('[%s] forecast_agent failed: %s', job_id, exc)
+        return {'error': str(exc)}

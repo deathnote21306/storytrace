@@ -55,15 +55,17 @@ psql $DATABASE_URL -f backend/db/migrations.sql
 
 ```
 FastAPI POST /analyze
-  └── LangGraph orchestrator
-        ├── Agent 1: seed_agent      — GDELT → finds root story, extracts entities (spaCy)
-        ├── Agent 2: crawler_agent   — feedparser, 15 RSS feeds, entity-matched headlines
-        ├── Agent 3: translator      — Gemini Flash, fires only for non-English articles
-        ├── Agent 4: dna_extractor   — Featherless API (Mistral-7B), structured JSON extraction
-        ├── Agent 5: drift_scorer    — pure Python math, zero tokens
-        ├── Agent 6: geo_builder     — builds D3-ready nested tree JSON
-        └── Agent 7: alert_agent     — fires webhook when drift_score >= 70
+  └── LangGraph orchestrator (backend/orchestrator.py)
+        ├── seed_agent      — GDELT → finds root story, extracts entities (spaCy); short-circuits to END on error
+        ├── crawler_agent   — feedparser, 15 RSS feeds, entity-matched headlines
+        ├── translator      — Gemini 2.0 Flash, mutates articles in-place; fires only for non-English text
+        ├── dna_extractor   — Featherless API (Qwen2.5-7B primary), parallel ThreadPoolExecutor; also extracts root DNA
+        ├── drift_scorer    — pure Python math, zero tokens
+        ├── geo_builder     — writes country back into scored_list; builds D3-ready nested tree JSON
+        └── alert_agent     — fires webhook when drift_score >= 70
 ```
+
+`forecast_agent.py` is separate — called on demand via `POST /forecast/{job_id}`, not part of the main pipeline.
 
 Results stored in PostgreSQL (`stories` + `outlet_versions` tables). Redis caches repeat queries.
 
@@ -103,18 +105,25 @@ Every agent receives and returns the same `state: dict`. The exact key names are
 
 - `POST /analyze` — accepts `{ url?, topic? }`, returns `{ job_id, status, poll_url }` (202)
 - `GET /story/{job_id}` — poll for results; returns full tree JSON when `status == "complete"`
-- `POST /forecast/{job_id}` — optional Gemini Pro world impact forecast
+- `GET /story/recent` — returns list of recent story jobs from DB
+- `POST /forecast/{job_id}` — on-demand Gemini 2.5 Pro geopolitical impact forecast
 - `GET /health`
 
 Full JSON shapes in `STORYTRACE_FULL_CONTEXT.md` section 8.
 
 ### Frontend
 
-- `pages/index.jsx` — URL/topic input + Speechmatics voice input
-- `pages/story/[id].jsx` — drift tree + diff panel, polls `GET /story/{id}`
-- `components/DriftTree.jsx` — D3.js v7 tree, nodes colored green→amber→red by drift score
+Uses Next.js App Router (not Pages Router). Key files:
+
+- `app/page.tsx` — home page: URL/topic input + VoiceInput
+- `app/story/[id]/page.tsx` — drift tree + diff panel, polls `GET /story/{id}`
+- `app/explore/page.tsx` — explore page: lists recent stories via `GET /story/recent`
+- `app/layout.tsx` — root layout with StoryTrace branding
+- `components/DriftTree.jsx` — D3.js v7 tree; nodes colored green→amber→red by drift score; country branch grouping
 - `components/DiffPanel.jsx` — facts added/dropped on node click
-- `components/VoiceInput.jsx` — Speechmatics WebSocket real-time transcription
+- `components/DriftLegend.tsx` — color legend for drift scores
+- `components/VoiceInput.tsx` — Speechmatics WebSocket real-time transcription
+- `components/ErrorBoundary.tsx` — React error boundary for graceful degradation
 
 ---
 
@@ -137,22 +146,23 @@ Copy `.env.example` to `.env`. Required keys:
 
 ## Package Version Notes
 
-`requirements.txt` has been updated to versions current as of May 2026. Two breaking changes from the spec code in `STORYTRACE_FULL_CONTEXT.md`:
+`requirements.txt` has been updated to versions current as of May 2026. All breaking changes from the original spec are already applied in the codebase:
 
-1. **`google-generativeai` is deprecated — use `google-genai`.**
-   The spec code uses `import google.generativeai as genai`. Replace with the new SDK:
+1. **`google-generativeai` is deprecated — `google-genai` is used throughout.**
+   All agents use the new SDK pattern (already implemented):
    ```python
    from google import genai
-   client = genai.Client()
+   client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY', ''))
+   r = client.models.generate_content(model='gemini-2.0-flash', contents=...)
    ```
-   API surface changed; check the [google-genai migration guide](https://ai.google.dev/gemini-api/docs/migrate) when implementing PR-10 (Translator) and PR-20 (Forecast Agent).
 
-2. **`openai` jumped from 1.x → 2.x.**
-   The Featherless DNA Extractor usage (`openai.OpenAI(base_url=..., api_key=...)`) still works in 2.x — the custom base URL pattern is unchanged. No code change required for PR-09.
+2. **`openai` 2.x is in use.** The Featherless DNA Extractor uses `openai.OpenAI(base_url='https://api.featherless.ai/v1', api_key=...)` — this custom base URL pattern is unchanged in 2.x and works as-is.
 
-3. **`langgraph` 1.x and `langchain` 1.x have updated APIs** vs the 0.x code in the spec. The `StateGraph` / `add_node` / `add_edge` pattern in the spec is still valid in 1.x. Verify imports when implementing PR-04 (orchestrator).
+3. **`langgraph` 1.x** — `StateGraph` / `add_node` / `add_edge` / `compile()` pattern is in use in `backend/orchestrator.py`.
 
-4. **spaCy + Python 3.14.3**: spaCy 3.8.13 works correctly on Python 3.14.3 — `en_core_web_sm` loads without issue. If the model is missing, run `python -m spacy download en_core_web_sm`.
+4. **spaCy + Python 3.14.3**: spaCy 3.8.13 works correctly. If `en_core_web_sm` is missing: `python -m spacy download en_core_web_sm`.
+
+5. **DNA Extractor model**: The primary Featherless model is `Qwen/Qwen2.5-7B-Instruct` (not Mistral-7B as in the original spec). Fallback chain: `Qwen/Qwen2.5-3B-Instruct` → `microsoft/Phi-3-mini-4k-instruct`.
 
 ---
 
@@ -189,25 +199,25 @@ Full details for every PR are in [plan.md](plan.md). Summary:
 | PR | Team | Branch | What | Depends on | Status |
 |----|------|--------|------|------------|--------|
 | **01** | D1 | `PR01-init-structure` | Scaffold — folders, .gitignore, .env.example, requirements.txt | — | ✅ done |
-| **02** | D1 | `feature/database` | DB schema (migrations.sql) + connection.py | PR-01 | — |
-| **03** | D1 | `feature/fastapi-skeleton` | **FastAPI skeleton — H4 API Contract Lock** | PR-02 | — |
-| **04** | D1 | `feature/orchestrator` | LangGraph orchestrator + agent stubs | PR-03 | — |
-| **05** | D1 | `feature/docker` | Docker Compose + Dockerfiles | PR-01 | — |
-| **06** | D2 | `feature/agent-seed` | Agent 1 — Story Seed (GDELT + NewsAPI) | PR-04 | — |
-| **07** | D2 | `feature/agent-crawler` | Agent 2 — Crawler (15 RSS feeds) | PR-06 | — |
-| **08** | D2 | `feature/agent-alert` | Agent 7 — Alert Agent (webhook) | PR-04 | — |
-| **09** | D3 | `feature/agent-dna` | Agent 3 — DNA Extractor (Featherless) | PR-04 | — |
-| **10** | D3 | `feature/agent-translator` | Agent 4 — Translator (Gemini Flash) | PR-04 | — |
-| **11** | D3 | `feature/agent-drift-scorer` | Agent 5 — Drift Scorer (pure Python) | PR-09 | — |
-| **12** | D3 | `feature/agent-geo-builder` | Agent 6 — Geo-Branch Builder | PR-11 | — |
-| **13** | All | `feature/e2e-pipeline` | **E2E integration test — H10 Pipeline Check** | PR-04–12 | — |
-| **14** | D4 | `feature/frontend-setup` | Next.js setup + routing (starts at H0) | PR-01 | — |
-| **15** | D4 | `feature/drift-tree` | DriftTree D3 component (static mock data) | PR-14 | — |
-| **16** | D4 | `feature/diff-panel` | DiffPanel component | PR-15 | — |
-| **17** | D4 | `feature/api-integration` | **API integration — H16 Frontend Lock** | PR-15, PR-03 | — |
-| **18** | D4 | `feature/voice-input` | VoiceInput (Speechmatics WebSocket) | PR-17 | — |
-| **19** | D4 | `feature/ui-polish` | UI polish + mobile responsive | PR-17, PR-18 | — |
-| **20** | D3 | `feature/agent-forecast` | Forecast Agent — Gemini Pro (optional) | PR-13 | — |
+| **02** | D1 | `feature/database` | DB schema (migrations.sql) + connection.py | PR-01 | ✅ done |
+| **03** | D1 | `feature/fastapi-skeleton` | **FastAPI skeleton — H4 API Contract Lock** | PR-02 | ✅ done |
+| **04** | D1 | `feature/orchestrator` | LangGraph orchestrator + agent stubs | PR-03 | ✅ done |
+| **05** | D1 | `feature/docker` | Docker Compose + Dockerfiles | PR-01 | ✅ done |
+| **06** | D2 | `feature/agent-seed` | Agent 1 — Story Seed (GDELT + NewsAPI) | PR-04 | ✅ done |
+| **07** | D2 | `feature/agent-crawler` | Agent 2 — Crawler (15 RSS feeds) | PR-06 | ✅ done |
+| **08** | D2 | `feature/agent-alert` | Agent 7 — Alert Agent (webhook) | PR-04 | ✅ done |
+| **09** | D3 | `feature/agent-dna` | DNA Extractor (Featherless/Qwen) | PR-04 | ✅ done |
+| **10** | D3 | `feature/agent-translator` | Translator (Gemini Flash) | PR-04 | ✅ done |
+| **11** | D3 | `feature/agent-drift-scorer` | Drift Scorer (pure Python) | PR-09 | ✅ done |
+| **12** | D3 | `feature/agent-geo-builder` | Geo-Branch Builder | PR-11 | ✅ done |
+| **13** | All | `feature/e2e-pipeline` | **E2E integration test — H10 Pipeline Check** | PR-04–12 | ✅ done |
+| **14** | D4 | `feature/frontend-setup` | Next.js App Router setup + routing | PR-01 | ✅ done |
+| **15** | D4 | `feature/drift-tree` | DriftTree D3 + DiffPanel components | PR-14 | ✅ done |
+| **16** | D4 | `feature/diff-panel` | DiffPanel component | PR-15 | ✅ done |
+| **17** | D4 | `feature/api-integration` | **API integration — H16 Frontend Lock** | PR-15, PR-03 | ✅ done |
+| **18** | D4 | `feature/voice-input` | VoiceInput (Speechmatics WebSocket) | PR-17 | ✅ done |
+| **19** | D4 | `feature/ui-polish` | UI polish, skeleton loader, ErrorBoundary, Explore page, mobile | PR-17, PR-18 | ✅ done |
+| **20** | D3 | `feature/agent-forecast` | Forecast Agent — Gemini 2.5 Pro (optional) | PR-13 | ✅ done |
 | **21** | D1 | `feature/deployment` | Vultr deployment + Nginx | PR-13 | — |
 | **22** | All | `feature/submission` | README + tag v1.0.0 + submit | All | — |
 
@@ -217,7 +227,13 @@ Full details for every PR are in [plan.md](plan.md). Summary:
 - **H16** — PR-17 merged → frontend wired to live API
 - **H23** — code freeze, tag `v1.0.0`, submit
 
-### Key implementation notes from plan.md
-- **PR-03**: add `load_dotenv()` at top of `main.py`, CORS middleware for `localhost:3000`, run `run_pipeline` via `loop.run_in_executor` (it's synchronous and blocks the event loop)
-- **PR-12**: geo_builder must write `art['country']` back into each `scored_list` dict before building the tree — otherwise `outlet_versions.country` is always `'Unknown'`
-- **PR-18**: use `SPEECHMATICS_KEY` (no `NEXT_PUBLIC_` prefix); the Next.js API route at `/api/speechmatics-token` exchanges it for a short-lived JWT that the browser receives
+### Implementation notes (current state)
+
+- **orchestrator**: `translator` runs before `dna_extractor` — translator mutates `state['articles']` in-place so DNA sees translated text. Do NOT change this order.
+- **dna_extractor**: extracts DNA for the root story too (`state['root']['dna']`) so drift_scorer has facts to compare against. Root DNA is only extracted if `root['dna']['facts_kept']` is empty.
+- **dna_extractor**: uses `ThreadPoolExecutor(max_workers=6)` for parallel article extraction — model fallback chain: `Qwen2.5-7B-Instruct` → `Qwen2.5-3B-Instruct` → `Phi-3-mini-4k-instruct`. Each call has a 15 s timeout.
+- **drift_scorer**: `find_parent_outlet` assigns the lowest-drift outlet seen so far as parent (not a true provenance tree). `fact_score` is 60 pts max; `tone_score` is 40 pts max.
+- **geo_builder**: maps known outlets to countries via `OUTLET_COUNTRY` dict; unknown outlets get `'Other'`. Writes `art['country']` back into `scored_list` dicts before building the tree.
+- **main.py**: `GET /story/recent` uses `get_recent()` from `backend/db/connection.py`. CORS allows `localhost:3000` and `localhost:3001`.
+- **forecast_agent**: uses `gemini-2.5-pro` (not flash). Called on demand from `POST /forecast/{job_id}`, not part of the main pipeline.
+- **PR-18 / VoiceInput**: `SPEECHMATICS_KEY` has no `NEXT_PUBLIC_` prefix; the Next.js API route at `/api/speechmatics-token` exchanges it for a short-lived JWT the browser uses.
