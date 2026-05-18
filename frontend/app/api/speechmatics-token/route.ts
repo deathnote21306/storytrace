@@ -1,4 +1,8 @@
 export async function GET() {
+  if (!process.env.SPEECHMATICS_KEY) {
+    return Response.json({ error: 'SPEECHMATICS_KEY not configured' }, { status: 500 })
+  }
+
   const r = await fetch('https://mp.speechmatics.com/v1/api_keys?type=rt', {
     method: 'POST',
     headers: {

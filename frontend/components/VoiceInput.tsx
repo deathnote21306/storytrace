@@ -1,12 +1,23 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
-export default function VoiceInput({ onTranscript }) {
+type Props = { onTranscript: (t: string) => void }
+
+export default function VoiceInput({ onTranscript }: Props) {
   const [listening, setListening] = useState(false)
   const [error, setError] = useState('')
-  const wsRef = useRef(null)
-  const streamRef = useRef(null)
-  const ctxRef = useRef(null)
+  const wsRef = useRef<WebSocket | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const ctxRef = useRef<AudioContext | null>(null)
+
+  // Clean up on unmount so mic/WS don't leak if user navigates away
+  useEffect(() => {
+    return () => {
+      wsRef.current?.close()
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      ctxRef.current?.close()
+    }
+  }, [])
 
   const startListening = async () => {
     setError('')
@@ -32,7 +43,7 @@ export default function VoiceInput({ onTranscript }) {
         const ctx = new AudioContext({ sampleRate: 44100 })
         ctxRef.current = ctx
         const source = ctx.createMediaStreamSource(stream)
-        // ScriptProcessor is deprecated but universally supported without a bundler-compatible worklet
+        // ScriptProcessor is deprecated but universally supported without a worklet setup
         const processor = ctx.createScriptProcessor(4096, 1, 1)
         processor.onaudioprocess = (e) => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -42,14 +53,15 @@ export default function VoiceInput({ onTranscript }) {
         }
         source.connect(processor)
         processor.connect(ctx.destination)
+
+        // Only show recording state once the connection is actually open
+        setListening(true)
       }
 
       ws.onmessage = (e) => {
         const data = JSON.parse(e.data)
-        if (
-          (data.message === 'AddTranscript' || data.message === 'AddPartialTranscript') &&
-          data.metadata?.transcript
-        ) {
+        // Only fire on final transcripts — partials would cause duplicate/accumulating text
+        if (data.message === 'AddTranscript' && data.metadata?.transcript) {
           onTranscript(data.metadata.transcript)
         }
       }
@@ -60,10 +72,8 @@ export default function VoiceInput({ onTranscript }) {
       }
 
       ws.onclose = () => setListening(false)
-
-      setListening(true)
     } catch (err) {
-      setError(err.message || 'Could not start recording')
+      setError((err as Error).message || 'Could not start recording')
     }
   }
 
