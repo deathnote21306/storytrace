@@ -110,7 +110,7 @@ def get_recent() -> list:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT id, topic, root_headline, root_outlet, status, created_at
+                """SELECT id, topic, root_headline, root_outlet, status, created_at, input_url
                    FROM stories
                    WHERE status='complete'
                    ORDER BY created_at DESC
@@ -121,7 +121,7 @@ def get_recent() -> list:
                 {
                     'job_id':    str(r[0]),
                     'topic':     r[1],
-                    'headline':  r[2],
+                    'headline':  r[2] or r[1] or r[6] or 'Untitled story',
                     'outlet':    r[3],
                     'created_at': str(r[5]),
                 }

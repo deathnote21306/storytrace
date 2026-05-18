@@ -6,13 +6,34 @@ TONE_MAP = {
     'unknown':    0,
 }
 
+_STOP = {
+    'the', 'a', 'an', 'is', 'in', 'on', 'at', 'to', 'of', 'and', 'or',
+    'for', 'that', 'this', 'was', 'were', 'are', 'be', 'been', 'has',
+    'have', 'had', 'by', 'with', 'as', 'it', 'its', 'he', 'she', 'they',
+    'we', 'who', 'which', 'but', 'if', 'from', 'about', 'after', 'also',
+    'said', 'says', 'say', 'new', 'one', 'two', 'not', 'no', 'their',
+}
+
+
+def _keywords(text: str) -> set:
+    return set(text.lower().split()) - _STOP
+
+
+def _fact_covered(root_fact: str, outlet_facts: list[str]) -> bool:
+    """True if any outlet fact shares >=40% of root fact's keywords."""
+    rw = _keywords(root_fact)
+    if not rw:
+        return False
+    return any(len(rw & _keywords(of)) / len(rw) >= 0.4 for of in outlet_facts)
+
 
 def compute_drift(root_dna: dict, outlet_dna: dict) -> int:
-    root_facts   = set(f.lower() for f in root_dna.get('facts_kept', []))
-    outlet_facts = set(f.lower() for f in outlet_dna.get('facts_kept', []))
+    root_facts   = root_dna.get('facts_kept', [])
+    outlet_facts = outlet_dna.get('facts_kept', [])
 
     if root_facts:
-        dropped_ratio = len(root_facts - outlet_facts) / len(root_facts)
+        covered      = sum(1 for rf in root_facts if _fact_covered(rf, outlet_facts))
+        dropped_ratio = (len(root_facts) - covered) / len(root_facts)
     else:
         dropped_ratio = 0
     fact_score = dropped_ratio * 60
