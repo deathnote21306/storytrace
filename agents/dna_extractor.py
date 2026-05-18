@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 
@@ -54,6 +55,7 @@ def extract_dna(article_text: str, root_text: str) -> dict:
             }],
             temperature=0.1,
             max_tokens=400,
+            timeout=15,
         )
         raw = response.choices[0].message.content.strip()
         raw = raw.replace('```json', '').replace('```', '').strip()
@@ -65,9 +67,20 @@ def extract_dna(article_text: str, root_text: str) -> dict:
 def run(state: dict) -> dict:
     root = state.get('root', {})
     root_text = root.get('text') or root.get('headline', '')
-    dna_list = []
-    for art in state.get('articles', []):
-        dna = extract_dna(art['text'], root_text)
-        dna_list.append({**art, 'dna': dna})
-    state['dna_list'] = dna_list
+    articles = state.get('articles', [])
+
+    results = [None] * len(articles)
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            executor.submit(extract_dna, art['text'], root_text): i
+            for i, art in enumerate(articles)
+        }
+        for future in as_completed(futures):
+            i = futures[future]
+            try:
+                results[i] = {**articles[i], 'dna': future.result()}
+            except Exception:
+                results[i] = {**articles[i], 'dna': copy.deepcopy(_FALLBACK_DNA)}
+
+    state['dna_list'] = results
     return state
