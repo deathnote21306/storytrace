@@ -1,6 +1,7 @@
 'use client'
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import VoiceInput from '@/components/VoiceInput'
 
 export default function Home() {
   const router = useRouter()
@@ -50,6 +51,7 @@ export default function Home() {
           className="flex-1 border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E5FA3]"
           disabled={loading}
         />
+        <VoiceInput onTranscript={(t: string) => setInput(prev => (prev + ' ' + t).trim())} />
         <button
           type="submit"
           disabled={loading || !input.trim()}
