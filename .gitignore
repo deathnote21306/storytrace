@@ -1,9 +1,0 @@
-.env
-__pycache__
-*.pyc
-node_modules
-.next
-.DS_Store
-.cursor
-memory-bank
-postman
