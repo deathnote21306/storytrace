@@ -23,27 +23,30 @@ export default function ExplorePage() {
   }, [])
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-[#1B3A6B] mb-6">Recent Stories</h1>
+    <div className="max-w-3xl mx-auto px-4 md:px-10 py-8">
+      <h1 className="text-2xl font-bold text-on-surface mb-6 flex items-center gap-3">
+        <span className="material-symbols-outlined text-secondary">explore</span>
+        Recent Stories
+      </h1>
 
       {stories === null && !error && (
-        <ul className="space-y-3 animate-pulse">
+        <ul className="space-y-3">
           {[1, 2, 3].map(i => (
-            <li key={i} className="h-16 bg-gray-100 rounded-lg" />
+            <li key={i} className="h-16 rounded-xl skeleton-shimmer border border-outline-variant" />
           ))}
         </ul>
       )}
 
       {error && (
-        <p className="text-gray-400 text-sm text-center py-16">
+        <p className="text-outline text-sm text-center py-16">
           Could not load recent stories — make sure the API is running.
         </p>
       )}
 
       {stories?.length === 0 && (
-        <p className="text-gray-400 text-sm text-center py-16">
+        <p className="text-outline text-sm text-center py-16">
           No completed stories yet.{' '}
-          <Link href="/" className="text-[#2E5FA3] underline">
+          <Link href="/" className="text-secondary hover:underline">
             Trace one now →
           </Link>
         </p>
@@ -55,12 +58,12 @@ export default function ExplorePage() {
             <li key={s.job_id}>
               <Link
                 href={`/story/${s.job_id}`}
-                className="block bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-[#2E5FA3] hover:shadow-sm transition-all"
+                className="block bg-surface-container border border-outline-variant rounded-xl px-4 py-3 hover:border-primary hover:bg-surface-container-high transition-all"
               >
-                <p className="font-medium text-[#1B3A6B] text-sm leading-snug">
+                <p className="font-medium text-on-surface text-sm leading-snug">
                   {s.headline || s.topic}
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs font-mono text-outline mt-1">
                   {s.outlet} · {new Date(s.created_at).toLocaleDateString()}
                 </p>
               </Link>

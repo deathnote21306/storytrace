@@ -15,10 +15,11 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.error) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-center px-4">
-          <p className="text-red-500 text-sm">Something went wrong while rendering this page.</p>
+          <span className="material-symbols-outlined text-error text-[40px]">error</span>
+          <p className="text-error text-sm">Something went wrong while rendering this page.</p>
           <button
             onClick={() => this.setState({ error: null })}
-            className="px-4 py-2 bg-[#1B3A6B] text-white rounded-lg text-sm hover:bg-[#2E5FA3] transition-colors"
+            className="px-4 py-2 bg-primary-container text-on-primary-container rounded-lg text-sm font-mono uppercase tracking-wider hover:opacity-90 transition-opacity"
           >
             Try again
           </button>
