@@ -10,7 +10,6 @@ export default function VoiceInput({ onTranscript }: Props) {
   const streamRef = useRef<MediaStream | null>(null)
   const ctxRef = useRef<AudioContext | null>(null)
 
-  // Clean up on unmount so mic/WS don't leak if user navigates away
   useEffect(() => {
     return () => {
       wsRef.current?.close()
@@ -34,18 +33,19 @@ export default function VoiceInput({ onTranscript }: Props) {
       wsRef.current = ws
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({
-          message: 'StartRecognition',
-          audio_format: { type: 'raw', encoding: 'pcm_f32le', sample_rate: 44100 },
-          transcription_config: { language: 'en', enable_partials: true },
-        }))
+        ws.send(
+          JSON.stringify({
+            message: 'StartRecognition',
+            audio_format: { type: 'raw', encoding: 'pcm_f32le', sample_rate: 44100 },
+            transcription_config: { language: 'en', enable_partials: true },
+          }),
+        )
 
         const ctx = new AudioContext({ sampleRate: 44100 })
         ctxRef.current = ctx
         const source = ctx.createMediaStreamSource(stream)
-        // ScriptProcessor is deprecated but universally supported without a worklet setup
         const processor = ctx.createScriptProcessor(4096, 1, 1)
-        processor.onaudioprocess = (e) => {
+        processor.onaudioprocess = e => {
           if (ws.readyState === WebSocket.OPEN) {
             const pcm = e.inputBuffer.getChannelData(0)
             ws.send(pcm.buffer)
@@ -53,14 +53,11 @@ export default function VoiceInput({ onTranscript }: Props) {
         }
         source.connect(processor)
         processor.connect(ctx.destination)
-
-        // Only show recording state once the connection is actually open
         setListening(true)
       }
 
-      ws.onmessage = (e) => {
+      ws.onmessage = e => {
         const data = JSON.parse(e.data)
-        // Only fire on final transcripts — partials would cause duplicate/accumulating text
         if (data.message === 'AddTranscript' && data.metadata?.transcript) {
           onTranscript(data.metadata.transcript)
         }
@@ -93,15 +90,19 @@ export default function VoiceInput({ onTranscript }: Props) {
         type="button"
         onClick={listening ? stopListening : startListening}
         title={listening ? 'Stop recording' : 'Speak your topic'}
-        className={`p-3 rounded-full transition-colors ${
+        className={`p-3 rounded-lg transition-all ${
           listening
-            ? 'bg-red-500 animate-pulse text-white'
-            : 'bg-[#2E5FA3] hover:bg-[#1B3A6B] text-white'
+            ? 'bg-error-container text-error animate-pulse'
+            : 'bg-surface-container-highest border border-outline-variant text-on-surface hover:border-primary hover:text-primary'
         }`}
       >
-        {listening ? '⏹' : '🎙'}
+        <span className="material-symbols-outlined text-[20px]">
+          {listening ? 'stop_circle' : 'mic'}
+        </span>
       </button>
-      {error && <p className="text-xs text-red-500 max-w-xs text-center">{error}</p>}
+      {error && (
+        <p className="text-xs text-error max-w-xs text-center absolute -bottom-8">{error}</p>
+      )}
     </div>
   )
 }
