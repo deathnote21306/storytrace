@@ -1,0 +1,14 @@
+.env
+.git
+.DS_Store
+venv
+__pycache__
+*.pyc
+*.pyo
+
+# Frontend has its own build — exclude from backend image
+frontend/node_modules
+frontend/.next
+
+# Test artifacts
+.pytest_cache

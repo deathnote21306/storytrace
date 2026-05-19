@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB:       storytrace
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Auto-runs migrations on first container start (only when data volume is empty)
+      - ./backend/db/migrations.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .                   # root — gives Dockerfile access to agents/, requirements.txt
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      # Override localhost URLs from .env with Docker service names
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/storytrace
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      # Mount source for --reload to pick up live code changes
+      - .:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0b1326;
+  --foreground: #dae2fd;
+  --on-background: #dae2fd;
+  --on-surface: #dae2fd;
+  --on-surface-variant: #c3c6d7;
+  --surface: #0b1326;
+  --surface-container: #171f33;
+  --surface-container-low: #131b2e;
+  --surface-container-lowest: #060e20;
+  --surface-container-high: #222a3d;
+  --surface-container-highest: #2d3449;
+  --surface-variant: #2d3449;
+  --outline: #8d90a0;
+  --outline-variant: #434655;
+  --primary: #b4c5ff;
+  --primary-container: #2563eb;
+  --on-primary-container: #eeefff;
+  --secondary: #4edea3;
+  --secondary-container: #00a572;
+  --tertiary: #ffb596;
+  --error: #ffb4ab;
+  --error-container: #93000a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-on-background: var(--on-background);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-surface: var(--surface);
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-container-highest: var(--surface-container-highest);
+  --color-surface-variant: var(--surface-variant);
+  --color-outline: var(--outline);
+  --color-outline-variant: var(--outline-variant);
+  --color-primary: var(--primary);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
+  --color-secondary: var(--secondary);
+  --color-secondary-container: var(--secondary-container);
+  --color-tertiary: var(--tertiary);
+  --color-error: var(--error);
+  --color-error-container: var(--error-container);
+  --font-sans: var(--font-hanken);
+  --font-mono: var(--font-jetbrains);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--on-background);
+  font-family: var(--font-hanken), system-ui, sans-serif;
+}
+
+.canvas-bg {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.drift-node {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.drift-node:hover {
+  filter: brightness(1.2);
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.node-pulse {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface-container) 0%,
+    var(--surface-container-high) 50%,
+    var(--surface-container) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
