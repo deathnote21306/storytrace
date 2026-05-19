@@ -1,11 +1,7 @@
-# Render Blueprint — deploy backend + frontend + Postgres from GitHub
-# Dashboard: https://dashboard.render.com → New → Blueprint → connect repo
+# Render Blueprint — https://dashboard.render.com → Blueprint → Ahmadjajja/storytrace
+# After changing this file: Blueprint → Manual sync
 #
-# After deploy:
-#   1. Copy the API URL (e.g. https://storytrace-api.onrender.com)
-#   2. Set NEXT_PUBLIC_API_URL on the frontend service to that URL (no trailing slash)
-#   3. Set CORS_ORIGINS on the API to your frontend URL (e.g. https://storytrace-web.onrender.com)
-#   4. Submit the FRONTEND URL for the hackathon demo
+# Hackathon demo URL: https://storytrace-web.onrender.com
 
 databases:
   - name: storytrace-db
@@ -35,7 +31,7 @@ services:
       - key: WEBHOOK_URL
         sync: false
       - key: CORS_ORIGINS
-        sync: false
+        value: https://storytrace-web.onrender.com
 
   - type: web
     name: storytrace-web
@@ -45,6 +41,6 @@ services:
     dockerContext: ./frontend
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        sync: false
+        value: https://storytrace-api.onrender.com
       - key: SPEECHMATICS_KEY
         sync: false
