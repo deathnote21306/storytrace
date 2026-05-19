@@ -1,6 +1,8 @@
 # Hackathon deploy — get your demo URL (~20 min)
 
-Use **Render** (free, no VPS). You will get two URLs; **submit the frontend URL**.
+**Using Railway?** → [RAILWAY.md](./RAILWAY.md) (matches the Railway dashboard)
+
+**Using Render?** → steps below. You will get two URLs; **submit the frontend URL**.
 
 Example submission URLs (yours will differ):
 
