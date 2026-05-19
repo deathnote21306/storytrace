@@ -2,7 +2,6 @@
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import VoiceInput from '@/components/VoiceInput'
-import { getApiUrl } from '@/lib/apiUrl'
 
 export default function Home() {
   const router = useRouter()
@@ -19,7 +18,7 @@ export default function Home() {
     setLoading(true)
     setError('')
 
-    const apiUrl = await getApiUrl()
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
     const isUrl = input.startsWith('http://') || input.startsWith('https://')
     const body = isUrl ? { url: input } : { topic: input }
 

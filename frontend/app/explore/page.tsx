@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getApiUrl } from '@/lib/apiUrl'
 
 type RecentStory = {
   job_id: string
@@ -16,8 +15,8 @@ export default function ExplorePage() {
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    getApiUrl()
-      .then(apiUrl => fetch(`${apiUrl}/story/recent`))
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    fetch(`${apiUrl}/story/recent`)
       .then(r => (r.ok ? r.json() : Promise.reject()))
       .then(setStories)
       .catch(() => setError(true))

@@ -12,7 +12,10 @@ _schema_ready = False
 
 
 def get_conn():
-    return psycopg2.connect(os.environ['DATABASE_URL'])
+    url = os.environ['DATABASE_URL']
+    if 'vultrdb.com' in url and 'sslmode=' not in url:
+        url += '&sslmode=require' if '?' in url else '?sslmode=require'
+    return psycopg2.connect(url)
 
 
 def ensure_schema():

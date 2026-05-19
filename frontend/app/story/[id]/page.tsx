@@ -14,7 +14,6 @@ import {
   type CountryBranch,
   type DriftBand,
 } from '@/lib/globeData'
-import { getApiUrl } from '@/lib/apiUrl'
 
 type TreeNode = {
   id?: string
@@ -68,13 +67,12 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
   const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
     let timer: ReturnType<typeof setTimeout>
     const controller = new AbortController()
-    let apiUrl = ''
 
     async function poll() {
       try {
-        if (!apiUrl) apiUrl = await getApiUrl()
         const res = await fetch(`${apiUrl}/story/${id}`, { signal: controller.signal })
         if (!res.ok) {
           setStory({ status: 'error', message: `Server error: ${res.status}` })
