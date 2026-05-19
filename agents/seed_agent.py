@@ -18,7 +18,7 @@ _BODY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 # Cap on words returned to keep LLM token budget predictable downstream
-_MAX_WORDS = 300
+_MAX_WORDS = 600
 
 GDELT_URL   = 'https://api.gdeltproject.org/api/v2/doc/doc'
 NEWSAPI_URL = 'https://newsapi.org/v2/everything'
@@ -122,6 +122,7 @@ def query_newsapi(query: str) -> dict | None:
 
 
 def _extract_entities(text: str) -> list[str]:
+    # TODO use LLM featherless to generate entities instead of spacy
     doc = nlp(text[:1000])  # cap NLP input for speed
     return [e.text for e in doc.ents if e.label_ in _ENTITY_LABELS]
 
