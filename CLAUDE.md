@@ -67,7 +67,7 @@ FastAPI POST /analyze
 
 `forecast_agent.py` is separate — called on demand via `POST /forecast/{job_id}`, not part of the main pipeline.
 
-Results stored in PostgreSQL (`stories` + `outlet_versions` tables). Redis caches repeat queries.
+Results stored in PostgreSQL (`stories` + `outlet_versions` tables).
 
 ### Shared LangGraph State
 
@@ -134,7 +134,6 @@ Copy `.env.example` to `.env`. Required keys:
 | Variable | Used by |
 |---|---|
 | `DATABASE_URL` | psycopg2 everywhere |
-| `REDIS_URL` | cache layer |
 | `NEWSAPI_KEY` | seed_agent fallback |
 | `FEATHERLESS_API_KEY` | dna_extractor (Mistral-7B via OpenAI-compatible API) |
 | `GEMINI_API_KEY` | translator + optional forecast |

@@ -17,16 +17,6 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   api:
     build:
       context: .                   # root — gives Dockerfile access to agents/, requirements.txt
@@ -37,11 +27,8 @@ services:
     environment:
       # Override localhost URLs from .env with Docker service names
       DATABASE_URL: postgresql://postgres:postgres@db:5432/storytrace
-      REDIS_URL: redis://redis:6379
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:

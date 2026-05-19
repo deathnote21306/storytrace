@@ -9,7 +9,6 @@
 - Python 3.14.3+
 - Node.js 18+
 - PostgreSQL 15+
-- Redis 7+
 
 ---
 
@@ -26,7 +25,6 @@ Open `.env` and set the following:
 | Variable | Where to get it |
 |---|---|
 | `DATABASE_URL` | Your local or hosted PostgreSQL connection string |
-| `REDIS_URL` | Your local or hosted Redis URL |
 | `NEWSAPI_KEY` | [newsapi.org](https://newsapi.org) |
 | `FEATHERLESS_API_KEY` | [featherless.ai](https://featherless.ai) |
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com) |
@@ -95,7 +93,7 @@ python -m pytest tests/test_seed_agent.py -v
 python -m pytest tests/test_seed_agent.py::test_run_with_topic_uses_gdelt -v
 ```
 
-Tests do not require any running services (database, Redis, or API keys) — all external calls are mocked.
+Tests do not require any running services (database or API keys) — all external calls are mocked.
 
 ---
 
@@ -114,7 +112,7 @@ App runs at [http://localhost:3000](http://localhost:3000).
 ## Full Stack with Docker
 
 ```bash
-# Start all services (PostgreSQL, Redis, API, frontend)
+# Start all services (PostgreSQL, API, frontend)
 docker-compose up -d
 
 # Stream backend logs
@@ -163,7 +161,6 @@ curl http://localhost:8000/story/<job_id>
 | Translation | Google Gemini Flash |
 | Forecasting | Google Gemini Pro |
 | Database | PostgreSQL + psycopg2 |
-| Cache | Redis |
 | Frontend | Next.js 14 + TypeScript + Tailwind |
 | Visualization | D3.js v7 |
 | Voice input | Speechmatics real-time WebSocket |

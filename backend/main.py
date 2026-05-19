@@ -2,12 +2,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import logging
-import os
 import uuid
 import asyncio
-import json as json_lib
 
-import redis
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,9 +27,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-r = redis.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379'))
-
 
 @app.post("/analyze", status_code=202, response_model=AnalyzeResponse)
 async def analyze(req: AnalyzeRequest, background_tasks: BackgroundTasks):
@@ -68,25 +62,10 @@ async def get_recent_stories():
 
 @app.get("/story/{job_id}", response_model=StoryResponse)
 async def get_story_result(job_id: str):
-    try:
-        cached = r.get(f"story:{job_id}")
-        if cached:
-            logger.debug('[%s] Redis cache hit', job_id)
-            return json_lib.loads(cached)
-    except Exception as exc:
-        logger.warning('[%s] Redis unavailable, falling back to DB: %s', job_id, exc)
-
     story = get_story(job_id)
     if not story:
         logger.warning('[%s] Story not found in DB', job_id)
         return {"error": "Story not found"}
-
-    if story['status'] == 'complete':
-        try:
-            r.setex(f"story:{job_id}", 3600, json_lib.dumps(story))
-            logger.debug('[%s] Result cached in Redis', job_id)
-        except Exception:
-            pass  # Redis unavailable — still return the result from DB
 
     return story
 
