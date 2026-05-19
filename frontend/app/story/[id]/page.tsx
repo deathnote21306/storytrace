@@ -1,9 +1,19 @@
 'use client'
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useMemo, use } from 'react'
 import DriftTree from '@/components/DriftTree'
 import DiffPanel from '@/components/DiffPanel'
 import DriftLegend from '@/components/DriftLegend'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import Globe from '@/components/Globe'
+import CountryPanel from '@/components/CountryPanel'
+import {
+  extractCountryBranches,
+  buildGlobePoints,
+  computeGlobeStats,
+  pickInitialCountry,
+  type CountryBranch,
+  type DriftBand,
+} from '@/lib/globeData'
 
 type TreeNode = {
   id?: string
@@ -54,7 +64,6 @@ function collectLeaves(node: TreeNode, acc: TreeNode[] = []): TreeNode[] {
 export default function StoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [story, setStory] = useState<StoryState | null>(null)
-  const [selected, setSelected] = useState<TreeNode | null>(null)
   const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
@@ -124,6 +133,71 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <ErrorBoundary>
+      <StoryComplete
+        id={id}
+        story={story}
+        headline={headline}
+        rootUrl={rootUrl}
+        root={root}
+        outletCount={outletCount}
+        leaves={leaves}
+      />
+    </ErrorBoundary>
+  )
+}
+
+type CompleteState = { status: 'complete'; root: Record<string, unknown>; tree: TreeNode }
+
+function StoryComplete({
+  id,
+  story,
+  headline,
+  rootUrl,
+  root,
+  outletCount,
+  leaves,
+}: {
+  id: string
+  story: CompleteState
+  headline: string
+  rootUrl: string
+  root: Record<string, string>
+  outletCount: number
+  leaves: TreeNode[]
+}) {
+  const branches = useMemo<CountryBranch[]>(
+    () => extractCountryBranches(story.tree as never),
+    [story.tree],
+  )
+  const [filter, setFilter] = useState<Set<DriftBand>>(
+    () => new Set<DriftBand>(['low', 'mid', 'high']),
+  )
+  const [selectedBranch, setSelectedBranch] = useState<CountryBranch | null>(
+    () => pickInitialCountry(branches),
+  )
+
+  useEffect(() => {
+    if (!selectedBranch && branches.length > 0) {
+      setSelectedBranch(pickInitialCountry(branches))
+    }
+  }, [branches, selectedBranch])
+
+  const points = useMemo(() => buildGlobePoints(branches, filter), [branches, filter])
+  const stats = useMemo(() => computeGlobeStats(branches), [branches])
+
+  function toggleBand(band: DriftBand) {
+    setFilter(prev => {
+      const next = new Set(prev)
+      if (next.has(band)) next.delete(band)
+      else next.add(band)
+      return next
+    })
+  }
+
+  const [selected, setSelected] = useState<TreeNode | null>(null)
+
+  return (
+    <ErrorBoundary>
       <div className="w-full min-h-[calc(100vh-4rem)] bg-background">
         <header className="bg-surface flex flex-col gap-2 px-4 md:px-10 py-6 border-b border-outline-variant">
           <div className="flex justify-between items-start gap-4">
@@ -161,7 +235,51 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </header>
 
-        <div className="px-4 md:px-10 w-full pb-12 pt-6">
+        <div className="px-4 md:px-10 w-full pb-12 pt-6 flex flex-col gap-10">
+          {/* Globe section — drift by country */}
+          <section className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-secondary text-[20px]">public</span>
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-on-surface-variant">
+                  Active Trace: Regional Drift Map
+                </span>
+              </div>
+              <TriageFilters filter={filter} onToggle={toggleBand} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-8 relative bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden canvas-bg">
+                <div className="h-[600px] w-full">
+                  <Globe
+                    points={points}
+                    onSelectCountry={setSelectedBranch}
+                    selectedCountry={selectedBranch?.country ?? null}
+                  />
+                </div>
+                <div className="absolute bottom-4 left-4 bg-surface-container/80 backdrop-blur border border-outline-variant rounded-xl p-4 flex flex-col gap-2 pointer-events-none">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-secondary text-[14px]">public</span>
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-on-surface-variant">
+                      Outlets: {stats.outletCount}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-secondary text-[14px]">insights</span>
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-on-surface-variant">
+                      Avg Drift: {stats.avgDrift}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <aside className="lg:col-span-4">
+                <CountryPanel branch={selectedBranch} />
+              </aside>
+            </div>
+          </section>
+
+          {/* Tree section */}
           <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
             {/* Tree panel — 70% */}
             <section className="lg:col-span-7 flex flex-col gap-6">
@@ -248,13 +366,58 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
         </div>
         <button
           type="button"
-          className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-primary-container text-on-primary-container shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
-          aria-label="Quick actions"
+          className="fixed bottom-8 right-8 z-40 flex items-center gap-3 bg-secondary-container text-on-primary-container pl-6 pr-7 py-4 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all"
+          aria-label="Generate geopolitical forecast"
         >
-          <span className="material-symbols-outlined">bolt</span>
+          <span className="material-symbols-outlined">auto_awesome</span>
+          <span className="text-[11px] font-mono font-bold uppercase tracking-widest">
+            Generate Geopolitical Forecast
+          </span>
         </button>
       </div>
     </ErrorBoundary>
+  )
+}
+
+function TriageFilters({
+  filter,
+  onToggle,
+}: {
+  filter: Set<DriftBand>
+  onToggle: (band: DriftBand) => void
+}) {
+  const bands: { band: DriftBand; label: string; dot: string; text: string }[] = [
+    { band: 'low',  label: 'Low Drift',  dot: 'border-secondary', text: 'text-secondary' },
+    { band: 'mid',  label: 'Mid Drift',  dot: 'border-tertiary',  text: 'text-tertiary' },
+    { band: 'high', label: 'High Drift', dot: 'border-error',     text: 'text-error' },
+  ]
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-outline mr-1">
+        Technical Triage
+      </span>
+      {bands.map(b => {
+        const active = filter.has(b.band)
+        return (
+          <button
+            key={b.band}
+            type="button"
+            onClick={() => onToggle(b.band)}
+            aria-pressed={active}
+            className={`px-3 py-1.5 rounded-full border flex items-center gap-2 transition-all ${
+              active
+                ? 'border-outline bg-surface-variant'
+                : 'border-outline-variant bg-surface-container opacity-50 hover:opacity-80'
+            }`}
+          >
+            <span className={`w-2.5 h-2.5 rounded-full border-2 ${b.dot}`} />
+            <span className={`text-[10px] font-mono font-bold uppercase tracking-wider ${active ? b.text : 'text-on-surface-variant'}`}>
+              {b.label}
+            </span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
