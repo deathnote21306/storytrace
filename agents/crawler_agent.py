@@ -18,6 +18,7 @@ MAX_ENTRIES_PER_FEED = 20
 MAX_CANDIDATES_PER_OUTLET = 3
 WORD_CAP = 300
 FETCH_TIMEOUT_SECS = 5
+KEYWORD_LENGTH = 6
 
 # Outlet → site domain. Used to build Google News RSS search queries (keyword + site filter)
 # so each fetch is keyword-scoped at the source instead of pulling the full latest feed.
@@ -109,16 +110,17 @@ def _build_search_context(root: dict) -> dict:
         return {}
     prompt = (
         'You are helping a news monitoring system find related articles across outlets.\n\n'
+        'Read the text od the news that is relevent to the headline provided below and understand what the story is about.\n\n'
         'Given this root news story, identify:\n'
-        '1. The single most specific and identifying word or short phrase (2-3 words max) '
+        f'1. The single most specific and identifying word or short phrase (mininum {KEYWORD_LENGTH} words) '
         'that uniquely describes what this story is about — the core subject.\n'
         '   Choose something that any outlet covering the SAME event would also use '
         '(e.g. a proper name, location, or unique event term — NOT a generic word like "attack" or "talks").\n'
         '2. A one-sentence summary of exactly what happened.\n\n'
         'Return ONLY valid JSON, no markdown:\n'
-        '{"keyword": "the single subject term", "summary": "one sentence"}\n\n'
+        f'{{"keyword": "the single subject term should be {KEYWORD_LENGTH} words", "summary": "one sentence"}}\n\n'
         f'HEADLINE: {headline}\n'
-        f'TEXT: {text[:600]}'
+        f'TEXT: {text}'
     )
     try:
         client = _get_featherless_client()
