@@ -36,6 +36,8 @@ export default function DiffPanel({ node, root }) {
     node.headline ||
     node?.dna?.framing ||
     'Summary unavailable for this selection.'
+  const articleTitle = node.headline
+  const articleUrl = node.url
   const hasDNA = Boolean(node?.dna)
   const nodeTypeLabel = node.type === 'country_branch' ? 'Country Branch' : 'Outlet Article'
   const confidence = hasDNA ? '98.4%' : 'N/A'
@@ -66,6 +68,30 @@ export default function DiffPanel({ node, root }) {
         </div>
 
         <div className="space-y-3">
+          {articleTitle && (
+            <div className="rounded border border-outline-variant bg-surface-container-high p-3">
+              <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-outline mb-1">
+                Article Title
+              </p>
+              <p className="text-sm text-on-surface leading-relaxed">{articleTitle}</p>
+            </div>
+          )}
+          {articleUrl && (
+            <div className="rounded border border-outline-variant bg-surface-container-high p-3">
+              <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-outline mb-1">
+                Article Link
+              </p>
+              <a
+                href={articleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-mono text-secondary hover:underline break-all"
+                title={articleUrl}
+              >
+                {articleUrl}
+              </a>
+            </div>
+          )}
           <p className="text-sm text-on-surface-variant leading-relaxed">{summary}</p>
           <div>
             <div className="flex justify-between items-center mb-1">
