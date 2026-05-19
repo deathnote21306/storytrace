@@ -1,0 +1,18 @@
+# Render: frontend only (backend on Vultr)
+# New → Blueprint → Blueprint path: render.frontend.yaml
+
+services:
+  - type: web
+    name: storytrace-web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    healthCheckPath: /
+    envVars:
+      - key: API_URL
+        sync: false
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: SPEECHMATICS_KEY
+        sync: false

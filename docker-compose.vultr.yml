@@ -1,0 +1,14 @@
+# Vultr: API only (uses managed Postgres via DATABASE_URL in .env)
+# Usage: docker compose -f docker-compose.vultr.yml up -d --build
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    environment:
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://storytrace-web.onrender.com}
