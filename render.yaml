@@ -37,7 +37,7 @@ services:
     name: storytrace-web
     runtime: docker
     plan: free
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./frontend/Dockerfile
     dockerContext: ./frontend
     healthCheckPath: /
     envVars:
