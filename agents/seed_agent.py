@@ -1,8 +1,11 @@
+import logging
 import os
 import re
 import requests
 import spacy
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 nlp = spacy.load('en_core_web_sm')
 
@@ -75,11 +78,16 @@ def _extract_entities(text: str) -> list[str]:
 
 def run(state: dict) -> dict:
     user_input: str = state['input']
+    job_id = state.get('job_id', '?')
+
+    logger.info('[%s] seed_agent started — input: "%s"', job_id, user_input[:120])
 
     # --- Direct URL input: treat the URL itself as the root story ---
     if _is_url(user_input):
+        logger.info('[%s] Input is a URL — fetching root story directly', job_id)
         text = _fetch_text(user_input)
         entities = _extract_entities(text) or [_outlet_from_url(user_input)]
+        logger.info('[%s] Entities extracted: %s', job_id, entities)
         state['entities'] = entities
         state['root'] = {
             'outlet':    _outlet_from_url(user_input),
@@ -90,18 +98,30 @@ def run(state: dict) -> dict:
             'published': '',
             'dna':       {},
         }
+        logger.info('[%s] seed_agent done — root outlet: %s', job_id, state['root']['outlet'])
         return state
 
     # --- Topic input: extract entities then query GDELT → NewsAPI ---
+    logger.info('[%s] Input is a topic — running NER then querying GDELT', job_id)
     entities = _extract_entities(user_input)
     query = ' '.join(entities[:3]) if entities else user_input
     state['entities'] = entities if entities else [user_input]
+    logger.info('[%s] Entities: %s | GDELT query: "%s"', job_id, state['entities'], query)
 
     gdelt_raw = query_gdelt(query)
+    if gdelt_raw:
+        logger.info('[%s] GDELT found article: "%s"', job_id, gdelt_raw.get('title', '')[:80])
+    else:
+        logger.info('[%s] GDELT returned nothing, trying NewsAPI', job_id)
+
     newsapi_raw = None if gdelt_raw else query_newsapi(query)
+    if newsapi_raw:
+        logger.info('[%s] NewsAPI found article: "%s"', job_id, newsapi_raw.get('title', '')[:80])
+
     raw = gdelt_raw or newsapi_raw
 
     if not raw:
+        logger.error('[%s] seed_agent: no source story found for "%s"', job_id, user_input)
         state['error'] = f'Could not find source story for: {user_input}'
         return state
 
@@ -128,4 +148,6 @@ def run(state: dict) -> dict:
             'dna':       {},
         }
 
+    logger.info('[%s] seed_agent done — root: "%s" @ %s',
+                job_id, state['root']['headline'][:80], state['root']['outlet'])
     return state

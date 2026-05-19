@@ -1,6 +1,10 @@
-import psycopg2
 import json
+import logging
 import os
+
+import psycopg2
+
+logger = logging.getLogger(__name__)
 
 
 def get_conn():
@@ -8,6 +12,7 @@ def get_conn():
 
 
 def save_story(job_id: str, topic: str | None, url: str | None):
+    logger.debug('[%s] Inserting story into DB (topic=%s)', job_id, topic)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -17,6 +22,8 @@ def save_story(job_id: str, topic: str | None, url: str | None):
 
 
 def update_story(job_id: str, result: dict, status: str):
+    logger.info('[%s] Updating story: status=%s, outlets=%d',
+                job_id, status, len(result.get('scored_list', [])))
     with get_conn() as conn:
         with conn.cursor() as cur:
             root = result.get('root', {})

@@ -19,11 +19,19 @@ def send_alert(payload: dict) -> bool:
 
 
 def run(state: dict) -> dict:
+    scored_list = state.get('scored_list', [])
+    job_id = state.get('job_id', '?')
+
+    logging.info('[%s] alert_agent started — checking %d article(s) (threshold=%d)',
+                 job_id, len(scored_list), THRESHOLD)
+
     drift_detected = []
     alerts_fired = []
-    for art in state.get('scored_list', []):
+    for art in scored_list:
         if art['drift_score'] >= THRESHOLD:
             drift_detected.append(art['outlet'])
+            logging.info('[%s] HIGH DRIFT: %s scored %d/100 — "%s"',
+                         job_id, art['outlet'], art['drift_score'], art.get('headline', '')[:70])
             payload = {
                 'job_id':      state.get('job_id'),
                 'outlet':      art['outlet'],
@@ -35,6 +43,12 @@ def run(state: dict) -> dict:
             }
             if send_alert(payload):
                 alerts_fired.append(art['outlet'])
+                logging.info('[%s] Webhook alert sent for %s', job_id, art['outlet'])
+            else:
+                logging.debug('[%s] No webhook configured, alert skipped for %s', job_id, art['outlet'])
+
+    logging.info('[%s] alert_agent done — %d high-drift outlet(s), %d webhook(s) fired',
+                 job_id, len(drift_detected), len(alerts_fired))
 
     state['drift_detected'] = drift_detected
     state['alerts_fired'] = alerts_fired

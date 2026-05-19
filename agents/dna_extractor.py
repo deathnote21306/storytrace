@@ -1,9 +1,12 @@
 import copy
 import json
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 MODELS = [
     'Qwen/Qwen2.5-7B-Instruct',
@@ -59,9 +62,14 @@ def extract_dna(article_text: str, root_text: str) -> dict:
             )
             raw = response.choices[0].message.content.strip()
             raw = raw.replace('```json', '').replace('```', '').strip()
-            return json.loads(raw)
-        except Exception:
+            result = json.loads(raw)
+            logger.debug('DNA extracted via %s: %d facts, tone=%s',
+                         model, len(result.get('facts_kept', [])), result.get('tone'))
+            return result
+        except Exception as exc:
+            logger.debug('Model %s failed, trying next: %s', model, exc)
             continue
+    logger.warning('All models failed for DNA extraction, using fallback')
     return copy.deepcopy(_FALLBACK_DNA)
 
 
@@ -69,11 +77,17 @@ def run(state: dict) -> dict:
     root = state.get('root', {})
     root_text = root.get('text') or root.get('headline', '')
     articles = state.get('articles', [])
+    job_id = state.get('job_id', '?')
+
+    logger.info('[%s] dna_extractor started — %d article(s) + root', job_id, len(articles))
 
     # Extract root DNA so drift_scorer has facts to compare against
     if root_text and not root.get('dna', {}).get('facts_kept'):
+        logger.info('[%s] Extracting root DNA', job_id)
         root['dna'] = extract_dna(root_text, root_text)
         state['root'] = root
+        logger.info('[%s] Root DNA: %d facts, tone=%s',
+                    job_id, len(root['dna'].get('facts_kept', [])), root['dna'].get('tone'))
 
     results = [None] * len(articles)
     with ThreadPoolExecutor(max_workers=6) as executor:
@@ -84,9 +98,18 @@ def run(state: dict) -> dict:
         for future in as_completed(futures):
             i = futures[future]
             try:
-                results[i] = {**articles[i], 'dna': future.result()}
-            except Exception:
+                dna = future.result()
+                results[i] = {**articles[i], 'dna': dna}
+                logger.debug('[%s] %s DNA: %d facts kept, %d dropped, tone=%s',
+                             job_id, articles[i]['outlet'],
+                             len(dna.get('facts_kept', [])),
+                             len(dna.get('facts_dropped', [])),
+                             dna.get('tone'))
+            except Exception as exc:
+                logger.warning('[%s] %s: DNA extraction raised unexpectedly: %s',
+                               job_id, articles[i]['outlet'], exc)
                 results[i] = {**articles[i], 'dna': copy.deepcopy(_FALLBACK_DNA)}
 
+    logger.info('[%s] dna_extractor done — %d result(s)', job_id, len(results))
     state['dna_list'] = results
     return state

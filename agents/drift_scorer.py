@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 TONE_MAP = {
     'neutral':    0,
     'supportive': 20,
@@ -53,12 +57,25 @@ def find_parent_outlet(index: int, scored_so_far: list) -> str:
 
 def run(state: dict) -> dict:
     root_dna = state.get('root', {}).get('dna', {})
-    scored = []
+    dna_list = state.get('dna_list', [])
+    job_id = state.get('job_id', '?')
 
-    for i, art in enumerate(state.get('dna_list', [])):
+    logger.info('[%s] drift_scorer started — scoring %d article(s)', job_id, len(dna_list))
+
+    scored = []
+    for i, art in enumerate(dna_list):
         score  = compute_drift(root_dna, art.get('dna', {}))
         parent = find_parent_outlet(i, scored)
         scored.append({**art, 'drift_score': score, 'parent_outlet': parent})
+        logger.debug('[%s] %s: drift_score=%d, parent=%s', job_id, art['outlet'], score, parent)
 
     state['scored_list'] = sorted(scored, key=lambda x: x['drift_score'])
+
+    if scored:
+        scores = [a['drift_score'] for a in scored]
+        logger.info('[%s] drift_scorer done — min=%d, max=%d, avg=%.1f',
+                    job_id, min(scores), max(scores), sum(scores) / len(scores))
+    else:
+        logger.info('[%s] drift_scorer done — no articles scored', job_id)
+
     return state
