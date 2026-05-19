@@ -18,6 +18,7 @@ PROMPT = """You are a journalism analyst. Extract the following from the article
 Return ONLY valid JSON — no explanation, no markdown, just the JSON object.
 
 {{
+  "summary":       "2-3 sentence factual summary of this article",
   "facts_kept":    ["list every key factual claim present in the article"],
   "facts_dropped": ["key facts from the ROOT STORY that are MISSING from this article"],
   "tone":          "neutral|alarming|dismissive|supportive",
@@ -39,6 +40,7 @@ _FALLBACK_DNA = {
     'framing':       'Could not extract',
     'political_lean': 'unknown',
 }
+_FALLBACK_SUMMARY = 'Summary unavailable for this article.'
 
 
 def _get_client() -> OpenAI:
@@ -63,6 +65,10 @@ def extract_dna(article_text: str, root_text: str) -> dict:
             raw = response.choices[0].message.content.strip()
             raw = raw.replace('```json', '').replace('```', '').strip()
             result = json.loads(raw)
+            summary = str(result.get('summary', '')).strip()
+            if not summary:
+                summary = _FALLBACK_SUMMARY
+            result['summary'] = summary
             logger.debug('DNA extracted via %s: %d facts, tone=%s',
                          model, len(result.get('facts_kept', [])), result.get('tone'))
             return result
@@ -99,7 +105,11 @@ def run(state: dict) -> dict:
             i = futures[future]
             try:
                 dna = future.result()
-                results[i] = {**articles[i], 'dna': dna}
+                results[i] = {
+                    **articles[i],
+                    'dna': dna,
+                    'summary': dna.get('summary', _FALLBACK_SUMMARY),
+                }
                 logger.debug('[%s] %s DNA: %d facts kept, %d dropped, tone=%s',
                              job_id, articles[i]['outlet'],
                              len(dna.get('facts_kept', [])),
@@ -108,7 +118,11 @@ def run(state: dict) -> dict:
             except Exception as exc:
                 logger.warning('[%s] %s: DNA extraction raised unexpectedly: %s',
                                job_id, articles[i]['outlet'], exc)
-                results[i] = {**articles[i], 'dna': copy.deepcopy(_FALLBACK_DNA)}
+                results[i] = {
+                    **articles[i],
+                    'dna': copy.deepcopy(_FALLBACK_DNA),
+                    'summary': _FALLBACK_SUMMARY,
+                }
 
     logger.info('[%s] dna_extractor done — %d result(s)', job_id, len(results))
     state['dna_list'] = results

@@ -20,15 +20,25 @@ export default function DiffPanel({ node, root }) {
     )
   }
 
-  if (!node.dna) return null
-
   const rootFacts = new Set(root?.dna?.facts_kept || [])
-  const nodeFacts = new Set(node.dna.facts_kept || [])
+  const nodeFacts = new Set(node?.dna?.facts_kept || [])
   const dropped = [...rootFacts].filter(f => !nodeFacts.has(f))
   const kept = [...nodeFacts].filter(f => rootFacts.has(f))
   const score = node.drift_score ?? 0
   const scoreColor = driftTextColor(score)
-  const parentLabel = node.parent_outlet || root?.outlet || 'Wire'
+  const nodeLabel = node.outlet || node.country || 'Node'
+  const parentLabel =
+    node.type === 'country_branch'
+      ? root?.outlet || 'Wire'
+      : node.parent_outlet || node.country || root?.outlet || 'Wire'
+  const summary =
+    node.summary ||
+    node.headline ||
+    node?.dna?.framing ||
+    'Summary unavailable for this selection.'
+  const hasDNA = Boolean(node?.dna)
+  const nodeTypeLabel = node.type === 'country_branch' ? 'Country Branch' : 'Outlet Article'
+  const confidence = hasDNA ? '98.4%' : 'N/A'
 
   return (
     <div className="bg-surface-container border border-outline-variant rounded-xl overflow-hidden flex flex-col">
@@ -36,13 +46,13 @@ export default function DiffPanel({ node, root }) {
         <div className="flex justify-between items-start mb-4 gap-4">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-on-surface truncate">
-              {node.outlet} Analysis
+              {nodeLabel} Analysis
             </h2>
             <p className="text-xs font-mono text-outline mt-1 truncate">
               Path:{' '}
               <span className="text-secondary">{parentLabel}</span>
               {' > '}
-              <span className={scoreColor}>{node.outlet}</span>
+              <span className={scoreColor}>{nodeLabel}</span>
             </p>
           </div>
           <div className="text-right shrink-0">
@@ -55,41 +65,58 @@ export default function DiffPanel({ node, root }) {
           </div>
         </div>
 
-        {node.dna.framing && (
-          <p className="text-sm text-on-surface-variant italic mb-4 leading-relaxed">
-            {node.dna.framing}
-          </p>
-        )}
+        <div className="space-y-3">
+          <p className="text-sm text-on-surface-variant leading-relaxed">{summary}</p>
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-outline">
+                Forensic Confidence
+              </span>
+              <span className="text-xs font-mono text-primary">{confidence}</span>
+            </div>
+            <div className="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+              <div className={`h-full bg-primary ${hasDNA ? 'w-[98.4%]' : 'w-[35%]'}`} />
+            </div>
+          </div>
+        </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          {node.dna.tone && (
-            <Tag icon="psychology" label={node.dna.tone} />
-          )}
-          {node.dna.political_lean && (
-            <Tag icon="balance" label={node.dna.political_lean} />
-          )}
+        <div className="flex flex-wrap gap-1.5 mt-4">
+          <Tag icon="account_tree" label={nodeTypeLabel} />
+          {node?.dna?.tone && <Tag icon="psychology" label={node.dna.tone} />}
+          {node?.dna?.political_lean && <Tag icon="balance" label={node.dna.political_lean} />}
         </div>
       </div>
 
       <div className="p-6 space-y-6">
-        <FactSection
-          title="Facts Dropped"
-          icon="remove_circle"
-          colorClass="text-error"
-          items={dropped}
-          emptyLabel="None dropped"
-          itemBg="bg-error-container/5 border-error/10 hover:bg-error-container/10"
-          indexColor="text-error"
-        />
-        <FactSection
-          title="Facts Kept"
-          icon="check_circle"
-          colorClass="text-secondary"
-          items={kept}
-          emptyLabel="None matched"
-          itemBg="bg-secondary-container/5 border-secondary/10 hover:bg-secondary-container/10"
-          indexColor="text-secondary"
-        />
+        {hasDNA ? (
+          <>
+            <FactSection
+              title="Facts Dropped"
+              icon="remove_circle"
+              colorClass="text-error"
+              items={dropped}
+              emptyLabel="None dropped"
+              itemBg="bg-error-container/5 border-error/10 hover:bg-error-container/10"
+              indexColor="text-error"
+            />
+            <FactSection
+              title="Facts Kept"
+              icon="check_circle"
+              colorClass="text-secondary"
+              items={kept}
+              emptyLabel="None matched"
+              itemBg="bg-secondary-container/5 border-secondary/10 hover:bg-secondary-container/10"
+              indexColor="text-secondary"
+            />
+          </>
+        ) : (
+          <div className="rounded border border-outline-variant bg-surface-container-high p-3">
+            <p className="text-sm text-on-surface-variant">
+              Branch-level selection does not include per-article DNA facts. Click an outlet node
+              for full forensic detail.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

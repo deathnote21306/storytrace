@@ -72,6 +72,7 @@ body {
 }
 
 .drift-node:hover {
+  transform: scale(1.08);
   filter: brightness(1.2);
 }
 

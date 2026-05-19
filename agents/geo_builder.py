@@ -22,6 +22,18 @@ OUTLET_COUNTRY = {
 }
 
 
+def _summarize_branch(nodes: list[dict]) -> str:
+    top_nodes = sorted(nodes, key=lambda n: n.get('drift_score', 0), reverse=True)[:3]
+    highlights: list[str] = []
+    for node in top_nodes:
+        outlet = node.get('outlet', 'Unknown outlet')
+        summary = str(node.get('summary', '')).strip()
+        headline = str(node.get('headline', '')).strip()
+        detail = summary or headline or 'Coverage captured with limited details.'
+        highlights.append(f'{outlet}: {detail}')
+    return ' '.join(highlights) if highlights else 'No coverage available in this branch yet.'
+
+
 def run(state: dict) -> dict:
     root = state.get('root', {})
     scored_list = state.get('scored_list', [])
@@ -40,6 +52,7 @@ def run(state: dict) -> dict:
         'outlet':      root.get('outlet', 'Wire'),
         'country':     'US',
         'headline':    root.get('headline', ''),
+        'summary':     root.get('summary', ''),
         'drift_score': 0,
         'parent_id':   None,
         'type':        'root',
@@ -55,6 +68,7 @@ def run(state: dict) -> dict:
             'country':     country,
             'headline':    art.get('headline', ''),
             'url':         art.get('url', ''),
+            'summary':     art.get('summary', ''),
             'drift_score': art['drift_score'],
             'parent_id':   art.get('parent_outlet', 'root'),
             'dna':         art.get('dna', {}),
@@ -68,6 +82,7 @@ def run(state: dict) -> dict:
             'id':          f'branch-{country}',
             'country':     country,
             'type':        'country_branch',
+            'summary':     _summarize_branch(nodes),
             'drift_score': avg_drift,
             'children':    nodes,
         })

@@ -6,11 +6,22 @@ import DriftLegend from '@/components/DriftLegend'
 import ErrorBoundary from '@/components/ErrorBoundary'
 
 type TreeNode = {
+  id?: string
+  type?: 'root' | 'country_branch' | 'outlet'
   outlet?: string
   country?: string
   drift_score?: number
   headline?: string
   url?: string
+  summary?: string
+  parent_outlet?: string
+  dna?: {
+    facts_kept?: string[]
+    facts_dropped?: string[]
+    tone?: string
+    framing?: string
+    political_lean?: string
+  }
   children?: TreeNode[]
 }
 
@@ -43,7 +54,7 @@ function collectLeaves(node: TreeNode, acc: TreeNode[] = []): TreeNode[] {
 export default function StoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [story, setStory] = useState<StoryState | null>(null)
-  const [selected, setSelected] = useState<Record<string, unknown> | null>(null)
+  const [selected, setSelected] = useState<TreeNode | null>(null)
   const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
@@ -154,7 +165,7 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
           <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
             {/* Tree panel — 70% */}
             <section className="lg:col-span-7 flex flex-col gap-6">
-              <div className="bg-surface-container-low border border-outline-variant rounded-xl overflow-hidden relative canvas-bg">
+              <div className="bg-surface-container-low border border-outline-variant rounded-xl overflow-hidden relative canvas-bg shadow-[0_0_0_1px_rgba(67,70,85,0.2)]">
                 <div className="p-4 border-b border-outline-variant flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-surface-container">
                   <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-on-surface-variant">
                     Narrative Mutation Trace: Wire-to-Outlet Map
@@ -235,6 +246,13 @@ export default function StoryPage({ params }: { params: Promise<{ id: string }> 
             </aside>
           </div>
         </div>
+        <button
+          type="button"
+          className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-primary-container text-on-primary-container shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
+          aria-label="Quick actions"
+        >
+          <span className="material-symbols-outlined">bolt</span>
+        </button>
       </div>
     </ErrorBoundary>
   )

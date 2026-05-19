@@ -43,35 +43,54 @@ export default function DriftTree({ treeData, onNodeClick }) {
       .join('g')
       .attr('class', 'node drift-node')
       .attr('transform', d => `translate(${d.x},${d.y})`)
-      .style('cursor', 'pointer')
-      .on('click', (event, d) => onNodeClick && onNodeClick(d.data))
+      .style('cursor', d => (d.depth === 0 ? 'default' : 'pointer'))
+      .on('click', (event, d) => {
+        if (d.depth === 0) return
+        onNodeClick && onNodeClick(d.data)
+      })
 
     node
       .append('circle')
-      .attr('r', 18)
+      .attr('r', d => {
+        if (d.depth === 0) return 20
+        if (d.data.type === 'country_branch') return 15
+        return 12
+      })
       .attr('fill', d => driftColor(d.data.drift_score || 0))
       .attr('stroke', '#0b1326')
       .attr('stroke-width', 3)
+      .attr('opacity', d => (d.depth === 0 ? 0.95 : 1))
 
     node
       .append('text')
       .attr('text-anchor', 'middle')
       .attr('dy', '0.35em')
       .attr('fill', '#0b1326')
-      .attr('font-size', '10px')
+      .attr('font-size', d => (d.depth === 0 ? '12px' : '9px'))
       .attr('font-weight', 'bold')
       .attr('font-family', 'var(--font-jetbrains), monospace')
-      .text(d => (d.data.drift_score !== undefined ? d.data.drift_score : ''))
+      .text(d => {
+        if (d.depth === 0) return 'R'
+        return d.data.drift_score !== undefined ? d.data.drift_score : ''
+      })
 
     node
       .append('text')
       .attr('text-anchor', 'middle')
-      .attr('dy', '2.5em')
+      .attr('dy', d => (d.data.type === 'country_branch' ? '2.2em' : '2.5em'))
       .attr('fill', '#dae2fd')
       .attr('font-size', '11px')
       .attr('font-weight', 'bold')
       .attr('font-family', 'var(--font-hanken), sans-serif')
-      .text(d => d.data.outlet || d.data.country || '')
+      .text(d => {
+        if (d.depth === 0) return `WIRE: ${d.data.outlet || 'ROOT'}`
+        return d.data.outlet || d.data.country || ''
+      })
+
+    node.append('title').text(d => {
+      if (d.depth === 0) return d.data.headline || 'Root story'
+      return d.data.summary || d.data.headline || d.data.outlet || d.data.country || 'Node'
+    })
   }, [treeData, onNodeClick])
 
   return (
