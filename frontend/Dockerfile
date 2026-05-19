@@ -12,5 +12,5 @@ COPY . .
 
 RUN npm run build
 
-EXPOSE 3000
-CMD ["npm", "start"]
+# Render sets PORT; bind all interfaces for container networking
+CMD ["sh", "-c", "npm run start -- -H 0.0.0.0 -p ${PORT:-3000}"]
