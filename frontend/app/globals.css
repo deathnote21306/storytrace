@@ -67,14 +67,15 @@ body {
   background-size: 24px 24px;
 }
 
-.drift-node {
+/* .drift-node {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
+} */
 
-.drift-node:hover {
+
+/* .drift-node:hover {
   transform: scale(1.08);
   filter: brightness(1.2);
-}
+} */
 
 @keyframes pulse-ring {
   0% {
