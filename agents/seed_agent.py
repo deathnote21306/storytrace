@@ -1,9 +1,12 @@
+import json
 import logging
 import os
 import re
 import requests
 import spacy
 from bs4 import BeautifulSoup
+from google import genai
+from google.genai import types
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -36,13 +39,51 @@ def _outlet_from_url(url: str) -> str:
     return domain.split('.')[0].capitalize()
 
 
+def _fetch_article_via_llm(url: str) -> tuple[str, str]:
+    """Fallback: ask Gemini (with Google Search) to read the article and return headline + body.
+
+    Used when direct HTML scraping returns no body text (e.g. JS-rendered pages,
+    paywalls, anti-bot pages). Returns ('', '') on any failure.
+    """
+    api_key = os.environ.get('GEMINI_API_KEY', '')
+    if not api_key:
+        logger.warning('_fetch_article_via_llm: GEMINI_API_KEY not set, skipping')
+        return '', ''
+    prompt = (
+        f'Use Google Search to read this news article and extract its content: {url}\n\n'
+        'Return ONLY valid JSON, no markdown fences, in this exact shape:\n'
+        '{"headline": "the article headline", "text": "the article body, up to ~600 words, plain text only"}\n\n'
+        'If you cannot access the article, return {"headline": "", "text": ""}.'
+    )
+    try:
+        client = genai.Client(api_key=api_key)
+        resp = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+            ),
+        )
+        raw = resp.text.strip().replace('```json', '').replace('```', '').strip()
+        result = json.loads(raw)
+        headline = (result.get('headline') or '').strip()
+        text = (result.get('text') or '').strip()
+        words = text.split()[:_MAX_WORDS]
+        return headline, ' '.join(words)
+    except Exception as exc:
+        logger.warning('_fetch_article_via_llm failed for %s: %s', url, exc)
+        return '', ''
+
+
 def _fetch_article(url: str) -> tuple[str, str]:
     """Fetch (headline, body_text) from a news URL.
 
     Uses BeautifulSoup with priority selectors: <article> > <main> > class-pattern
     matching common article-body conventions > <body>. Strips scripts/nav/ads/etc.
-    Returns ('', '') on any error.
+    Falls back to a Gemini + Google Search LLM call when the body is empty
+    (JS-rendered pages, paywalls, etc.). Returns ('', '') on total failure.
     """
+    headline, text = '', ''
     try:
         r = requests.get(url, timeout=10, headers={'User-Agent': 'StoryTrace/1.0'})
         r.raise_for_status()
@@ -53,7 +94,6 @@ def _fetch_article(url: str) -> tuple[str, str]:
             tag.decompose()
 
         # Headline: og:title (most reliable) → <h1> → <title>
-        headline = ''
         og = soup.find('meta', attrs={'property': 'og:title'})
         if og and og.get('content'):
             headline = og['content'].strip()
@@ -73,11 +113,19 @@ def _fetch_article(url: str) -> tuple[str, str]:
             or soup.body
             or soup
         )
-        text = body.get_text(separator=' ', strip=True)
-        words = text.split()[:_MAX_WORDS]
-        return headline, ' '.join(words)
+        raw_text = body.get_text(separator=' ', strip=True)
+        words = raw_text.split()[:_MAX_WORDS]
+        text = ' '.join(words)
     except Exception:
-        return '', ''
+        pass
+
+    if not text:
+        logger.info('BeautifulSoup returned empty body for %s — falling back to LLM + Google Search', url)
+        llm_headline, llm_text = _fetch_article_via_llm(url)
+        headline = headline or llm_headline
+        text = llm_text
+
+    return headline, text
 
 
 def _fetch_text(url: str) -> str:
@@ -131,7 +179,7 @@ def run(state: dict) -> dict:
     user_input: str = state['input']
     job_id = state.get('job_id', '?')
 
-    logger.info('[%s] seed_agent started — input: "%s"', job_id, user_input[:120])
+    logger.info('[%s]  🌱 ════════ SEED AGENT STARTED ════════  🌱  |  input: "%s"', job_id, user_input[:120])
 
     # --- Direct URL input: treat the URL itself as the root story ---
     if _is_url(user_input):

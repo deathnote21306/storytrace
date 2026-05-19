@@ -13,6 +13,7 @@ from openai import OpenAI
 logger = logging.getLogger(__name__)
 
 _FEATHERLESS_MODEL = 'Qwen/Qwen2.5-7B-Instruct'
+_FEATHERLESS_CONTEXT_MODEL = 'Qwen/Qwen2.5-72B-Instruct'
 
 MAX_ENTRIES_PER_FEED = 20
 MAX_CANDIDATES_PER_OUTLET = 3
@@ -112,20 +113,21 @@ def _build_search_context(root: dict) -> dict:
         'You are helping a news monitoring system find related articles across outlets.\n\n'
         'Read the text od the news that is relevent to the headline provided below and understand what the story is about.\n\n'
         'Given this root news story, identify:\n'
-        f'1. The single most specific and identifying word or short phrase (mininum {KEYWORD_LENGTH} words) '
+        f'1. The single most specific and identifying short phrase (mininum {KEYWORD_LENGTH} words) '
         'that uniquely describes what this story is about — the core subject.\n'
         '   Choose something that any outlet covering the SAME event would also use '
-        '(e.g. a proper name, location, or unique event term — NOT a generic word like "attack" or "talks").\n'
+        '(e.g. a proper name, number, location, time, or unique event term — NOT a generic word like "attack" or "talks" or unnecesory jargons).\n'
         '2. A one-sentence summary of exactly what happened.\n\n'
         'Return ONLY valid JSON, no markdown:\n'
-        f'{{"keyword": "the single subject term should be {KEYWORD_LENGTH} words", "summary": "one sentence"}}\n\n'
+        f'{{"keyword": "the single subject term should be atleast {KEYWORD_LENGTH} words", "summary": "one sentence"}}\n\n'
         f'HEADLINE: {headline}\n'
         f'TEXT: {text}'
     )
     try:
+        logger.info(f'headline: {headline}, text: {text}')
         client = _get_featherless_client()
         resp = client.chat.completions.create(
-            model=_FEATHERLESS_MODEL,
+            model=_FEATHERLESS_CONTEXT_MODEL,
             messages=[{'role': 'user', 'content': prompt}],
             temperature=0.1,
             max_tokens=120,
@@ -133,7 +135,7 @@ def _build_search_context(root: dict) -> dict:
         raw = resp.choices[0].message.content.strip().replace('```json', '').replace('```', '').strip()
         result = json.loads(raw)
         logger.info('Search context built: keyword="%s" — "%s"',
-                    result.get('keyword', ''), result.get('summary', '')[:80])
+                    result.get('keyword', ''), result.get('summary', ''))
         return result
     except Exception as exc:
         logger.warning('_build_search_context LLM call failed, falling back to entities: %s', exc)
@@ -242,7 +244,7 @@ def run(state: dict) -> dict:
     entities = state.get('entities', [])
     job_id = state.get('job_id', '?')
 
-    logger.info('[%s] crawler_agent started — entities: %s', job_id, entities)
+    logger.info('[%s]  🕷️ ════════ CRAWLER AGENT STARTED ════════  🕷️  |  entities: %s', job_id, entities)
 
     # Step 1: LLM-generated search context — single subject keyword + story fingerprint
     search_ctx = _build_search_context(root)

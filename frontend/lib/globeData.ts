@@ -27,6 +27,7 @@ export type OutletNode = {
     facts_dropped?: string[]
     tone?: string
     framing?: string
+    summary?: string
     political_lean?: string
   }
   type?: string

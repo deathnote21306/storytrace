@@ -47,7 +47,7 @@ pipeline = build_pipeline()
 
 
 def run_pipeline(job_id: str, user_input: str) -> dict:
-    logger.info('[%s] Pipeline starting — input: "%s"', job_id, user_input[:120])
+    logger.info('[%s] ************************* Pipeline starting ************************** — input: "%s"', job_id, user_input[:120])
     initial_state = {
         'job_id': job_id,
         'input':  user_input,

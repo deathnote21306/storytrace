@@ -39,7 +39,7 @@ def run(state: dict) -> dict:
     scored_list = state.get('scored_list', [])
     job_id = state.get('job_id', '?')
 
-    logger.info('[%s] geo_builder started — building tree from %d article(s)', job_id, len(scored_list))
+    logger.info('[%s]  🌍 ════════ GEO BUILDER STARTED ════════  🌍  |  building tree from %d article(s)', job_id, len(scored_list))
 
     # write country back into each scored article so DB has real country names
     for art in scored_list:
@@ -52,7 +52,7 @@ def run(state: dict) -> dict:
         'outlet':      root.get('outlet', 'Wire'),
         'country':     'US',
         'headline':    root.get('headline', ''),
-        'summary':     root.get('summary', ''),
+        'summary':     root.get('dna', {}).get('summary', '') or root.get('summary', ''),
         'drift_score': 0,
         'parent_id':   None,
         'type':        'root',
@@ -68,7 +68,7 @@ def run(state: dict) -> dict:
             'country':     country,
             'headline':    art.get('headline', ''),
             'url':         art.get('url', ''),
-            'summary':     art.get('summary', ''),
+            'summary':     art.get('dna', {}).get('summary', '') or art.get('summary', ''),
             'drift_score': art['drift_score'],
             'parent_id':   art.get('parent_outlet', 'root'),
             'dna':         art.get('dna', {}),

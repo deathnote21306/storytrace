@@ -27,7 +27,7 @@ def run(state: dict) -> dict:
     articles = state.get('articles', [])
     job_id = state.get('job_id', '?')
 
-    logger.info('[%s] translator started — %d article(s) to inspect', job_id, len(articles))
+    logger.info('[%s]  🌐 ════════ TRANSLATOR STARTED ════════  🌐  |  %d article(s) to inspect', job_id, len(articles))
 
     translated = 0
     for art in articles:

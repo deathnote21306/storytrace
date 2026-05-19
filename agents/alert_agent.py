@@ -22,7 +22,7 @@ def run(state: dict) -> dict:
     scored_list = state.get('scored_list', [])
     job_id = state.get('job_id', '?')
 
-    logging.info('[%s] alert_agent started — checking %d article(s) (threshold=%d)',
+    logging.info('[%s]  🚨 ════════ ALERT AGENT STARTED ════════  🚨  |  checking %d article(s) (threshold=%d)',
                  job_id, len(scored_list), THRESHOLD)
 
     drift_detected = []

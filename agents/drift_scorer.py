@@ -60,7 +60,7 @@ def run(state: dict) -> dict:
     dna_list = state.get('dna_list', [])
     job_id = state.get('job_id', '?')
 
-    logger.info('[%s] drift_scorer started — scoring %d article(s)', job_id, len(dna_list))
+    logger.info('[%s]  📊 ════════ DRIFT SCORER STARTED ════════  📊  |  scoring %d article(s)', job_id, len(dna_list))
 
     scored = []
     for i, art in enumerate(dna_list):

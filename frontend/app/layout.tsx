@@ -32,7 +32,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col bg-background text-on-background font-sans overflow-x-hidden selection:bg-primary-container/40">
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-background text-on-background font-sans overflow-x-hidden selection:bg-primary-container/40"
+      >
         <nav className="bg-surface-container-high flex justify-between items-center px-4 md:px-10 h-16 w-full fixed top-0 border-b border-outline-variant z-50">
           <div className="flex items-center gap-6 md:gap-8">
             <Link

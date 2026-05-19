@@ -1,5 +1,15 @@
 'use client'
 
+// Placeholder the legacy DNA extractor wrote when LLM extraction failed.
+// Existing tree JSON in stories.tree may still contain it; normalize to empty
+// so the headline fallback in the summary chain fires.
+const LEGACY_SUMMARY_PLACEHOLDER = 'Summary unavailable for this article.'
+
+function cleanSummary(s) {
+  const trimmed = (s || '').trim()
+  return trimmed === LEGACY_SUMMARY_PLACEHOLDER ? '' : trimmed
+}
+
 function driftTextColor(score) {
   if (score >= 67) return 'text-error'
   if (score >= 34) return 'text-tertiary'
@@ -20,10 +30,12 @@ export default function DiffPanel({ node, root }) {
     )
   }
 
-  const rootFacts = new Set(root?.dna?.facts_kept || [])
-  const nodeFacts = new Set(node?.dna?.facts_kept || [])
-  const dropped = [...rootFacts].filter(f => !nodeFacts.has(f))
-  const kept = [...nodeFacts].filter(f => rootFacts.has(f))
+  // The DNA Extractor populates both arrays directly on each outlet's DNA
+  // (stored in outlet_versions.dna). Reading them straight is correct;
+  // computing them by set-diffing against root.dna.facts_kept would break
+  // because LLM-paraphrased fact strings rarely match across outlets verbatim.
+  const kept    = node?.dna?.facts_kept    || []
+  const dropped = node?.dna?.facts_dropped || []
   const score = node.drift_score ?? 0
   const scoreColor = driftTextColor(score)
   const nodeLabel = node.outlet || node.country || 'Node'
@@ -31,10 +43,11 @@ export default function DiffPanel({ node, root }) {
     node.type === 'country_branch'
       ? root?.outlet || 'Wire'
       : node.parent_outlet || node.country || root?.outlet || 'Wire'
+  // Prefer the DNA summary (normalized so the legacy placeholder is treated as
+  // empty); fall back to the article headline; finally the panel-level message.
   const summary =
-    node.summary ||
+    cleanSummary(node?.dna?.summary) ||
     node.headline ||
-    node?.dna?.framing ||
     'Summary unavailable for this selection.'
   const articleTitle = node.headline
   const articleUrl = node.url

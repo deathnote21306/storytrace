@@ -38,9 +38,9 @@ _FALLBACK_DNA = {
     'facts_dropped': [],
     'tone':          'unknown',
     'framing':       'Could not extract',
+    'summary':       '',
     'political_lean': 'unknown',
 }
-_FALLBACK_SUMMARY = 'Summary unavailable for this article.'
 
 
 def _get_client() -> OpenAI:
@@ -65,10 +65,9 @@ def extract_dna(article_text: str, root_text: str) -> dict:
             raw = response.choices[0].message.content.strip()
             raw = raw.replace('```json', '').replace('```', '').strip()
             result = json.loads(raw)
-            summary = str(result.get('summary', '')).strip()
-            if not summary:
-                summary = _FALLBACK_SUMMARY
-            result['summary'] = summary
+            # Leave summary as '' if the LLM didn't produce one; the frontend
+            # falls back to headline rather than showing a placeholder string.
+            result['summary'] = str(result.get('summary', '')).strip()
             logger.debug('DNA extracted via %s: %d facts, tone=%s',
                          model, len(result.get('facts_kept', [])), result.get('tone'))
             return result
@@ -85,7 +84,7 @@ def run(state: dict) -> dict:
     articles = state.get('articles', [])
     job_id = state.get('job_id', '?')
 
-    logger.info('[%s] dna_extractor started — %d article(s) + root', job_id, len(articles))
+    logger.info('[%s]  🧬 ════════ DNA EXTRACTOR STARTED ════════  🧬  |  %d article(s) + root', job_id, len(articles))
 
     # Extract root DNA so drift_scorer has facts to compare against
     if root_text and not root.get('dna', {}).get('facts_kept'):
@@ -108,7 +107,7 @@ def run(state: dict) -> dict:
                 results[i] = {
                     **articles[i],
                     'dna': dna,
-                    'summary': dna.get('summary', _FALLBACK_SUMMARY),
+                    'summary': dna.get('summary', ''),
                 }
                 logger.debug('[%s] %s DNA: %d facts kept, %d dropped, tone=%s',
                              job_id, articles[i]['outlet'],
@@ -121,7 +120,7 @@ def run(state: dict) -> dict:
                 results[i] = {
                     **articles[i],
                     'dna': copy.deepcopy(_FALLBACK_DNA),
-                    'summary': _FALLBACK_SUMMARY,
+                    'summary': '',
                 }
 
     logger.info('[%s] dna_extractor done — %d result(s)', job_id, len(results))

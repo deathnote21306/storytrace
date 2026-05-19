@@ -43,7 +43,7 @@ def run(story: dict) -> dict:
     job_id = story.get('job_id', '?')
     headline = root.get('headline', '')
 
-    logger.info('[%s] forecast_agent started — headline: "%s"', job_id, headline[:80])
+    logger.info('[%s]  🔮 ════════ FORECAST AGENT STARTED ════════  🔮  |  headline: "%s"', job_id, headline[:80])
 
     prompt = PROMPT.format(
         headline=headline,

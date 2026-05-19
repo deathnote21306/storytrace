@@ -23,6 +23,24 @@ const BAND_BAR: Record<'low' | 'mid' | 'high', string> = {
   high: 'bg-error',
 }
 
+// Placeholder string the legacy DNA extractor wrote when LLM extraction failed.
+// Existing tree JSON in stories.tree may still contain it; treat as empty so the
+// headline fallback fires.
+const LEGACY_SUMMARY_PLACEHOLDER = 'Summary unavailable for this article.'
+
+function cleanSummary(s?: string): string {
+  const trimmed = s?.trim() ?? ''
+  return trimmed === LEGACY_SUMMARY_PLACEHOLDER ? '' : trimmed
+}
+
+// Branch summaries are built by joining outlet entries ("Outlet: detail. ..."),
+// so the placeholder may appear inline. Strip those fragments too.
+function cleanBranchSummary(s?: string): string {
+  if (!s) return ''
+  const cleaned = s.replace(new RegExp(LEGACY_SUMMARY_PLACEHOLDER, 'g'), '').trim()
+  return cleaned === '' ? '' : cleaned
+}
+
 export default function CountryPanel({ branch }: Props) {
   if (!branch) {
     return (
@@ -72,7 +90,7 @@ export default function CountryPanel({ branch }: Props) {
           Narrative Summary
         </span>
         <p className="text-sm text-on-surface italic leading-relaxed">
-          {branch.summary || 'No summary available for this country.'}
+          {cleanBranchSummary(branch.summary) || 'No summary available for this country.'}
         </p>
       </div>
     </div>
@@ -82,7 +100,13 @@ export default function CountryPanel({ branch }: Props) {
 function OutletCard({ outlet }: { outlet: OutletNode }) {
   const score = outlet.drift_score ?? 0
   const band = bandFor(score)
-  const detail = outlet.summary?.trim() || outlet.headline?.trim() || 'Coverage captured with limited details.'
+  // DNA summary is the canonical field; fall back to outlet.summary (older trees)
+  // then headline if everything else is empty.
+  const detail =
+    cleanSummary(outlet.dna?.summary) ||
+    cleanSummary(outlet.summary) ||
+    outlet.headline?.trim() ||
+    'Coverage captured with limited details.'
   const alignmentPct = Math.max(2, 100 - score)
 
   return (
