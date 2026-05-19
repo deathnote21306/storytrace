@@ -25,7 +25,10 @@ app = FastAPI(title="StoryTrace API")
 
 @app.on_event("startup")
 def _startup():
-    ensure_schema()
+    try:
+        ensure_schema()
+    except Exception as exc:
+        logger.error('Schema migration failed (API will still start): %s', exc)
 
 
 _cors_origins = os.environ.get(

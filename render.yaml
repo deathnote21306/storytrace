@@ -39,6 +39,7 @@ services:
     plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: ./frontend
+    healthCheckPath: /
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://storytrace-api.onrender.com

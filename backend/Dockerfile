@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -12,4 +12,5 @@ RUN python -m spacy download en_core_web_sm
 # Copy the full repo (build context is repo root, not ./backend)
 COPY . .
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Render sets PORT (default 10000); must not hardcode 8000
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

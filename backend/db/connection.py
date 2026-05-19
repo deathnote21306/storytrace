@@ -42,7 +42,10 @@ def ensure_schema():
                 try:
                     cur.execute(stmt)
                 except (pg_errors.DuplicateTable, pg_errors.DuplicateObject, pg_errors.DuplicateSchema):
-                    pass
+                    conn.rollback()
+                except Exception as exc:
+                    conn.rollback()
+                    logger.warning('Migration statement skipped: %s', exc)
 
     _schema_ready = True
     logger.info('Database schema ready')
