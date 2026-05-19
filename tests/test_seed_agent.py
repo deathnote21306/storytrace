@@ -113,10 +113,97 @@ def test_run_sets_error_when_both_sources_empty(monkeypatch):
 
 
 def test_run_with_url_input():
-    with patch('agents.seed_agent._fetch_text', return_value='Some article words about Iran nuclear'):
+    with patch(
+        'agents.seed_agent._fetch_article',
+        return_value=('Iran Nuclear Deal Signed', 'Some article words about Iran nuclear'),
+    ):
         state = run({'input': 'https://reuters.com/world/iran-nuclear-2024'})
 
     assert state.get('error') is None
     assert state['root']['url'] == 'https://reuters.com/world/iran-nuclear-2024'
     assert state['root']['outlet'] == 'Reuters'
+    assert state['root']['headline'] == 'Iran Nuclear Deal Signed'
+    assert state['root']['text'] == 'Some article words about Iran nuclear'
     assert 'entities' in state
+
+
+# --- _fetch_article: BeautifulSoup extraction ---
+
+def test_fetch_article_extracts_og_title_and_article_body():
+    from agents.seed_agent import _fetch_article
+    html = """
+    <html><head>
+        <meta property="og:title" content="Breaking: Iran Signs Nuclear Deal">
+        <title>Reuters | Iran</title>
+    </head><body>
+        <nav>Home | World | Politics</nav>
+        <header>Reuters logo</header>
+        <article>
+            <h1>Iran Signs Nuclear Deal</h1>
+            <p>Tehran agreed today to limit uranium enrichment.</p>
+            <p>The deal was brokered by six world powers.</p>
+        </article>
+        <footer>Copyright 2024 Reuters</footer>
+        <script>console.log('tracking');</script>
+    </body></html>
+    """
+    mock_resp = MagicMock()
+    mock_resp.text = html
+    mock_resp.raise_for_status = MagicMock()
+    with patch('agents.seed_agent.requests.get', return_value=mock_resp):
+        headline, text = _fetch_article('https://reuters.com/article')
+
+    assert headline == 'Breaking: Iran Signs Nuclear Deal'
+    assert 'Tehran agreed today to limit uranium enrichment' in text
+    assert 'six world powers' in text
+    # noise filtered out
+    assert 'Home | World | Politics' not in text
+    assert 'Reuters logo' not in text
+    assert 'Copyright 2024' not in text
+    assert 'tracking' not in text
+
+
+def test_fetch_article_falls_back_to_h1_when_no_og_title():
+    from agents.seed_agent import _fetch_article
+    html = """
+    <html><head><title>Site Name</title></head>
+    <body><article><h1>Plain Headline Here</h1><p>Body text.</p></article></body></html>
+    """
+    mock_resp = MagicMock()
+    mock_resp.text = html
+    mock_resp.raise_for_status = MagicMock()
+    with patch('agents.seed_agent.requests.get', return_value=mock_resp):
+        headline, text = _fetch_article('https://example.com/article')
+
+    assert headline == 'Plain Headline Here'
+    assert 'Body text.' in text
+
+
+def test_fetch_article_uses_class_pattern_when_no_article_tag():
+    from agents.seed_agent import _fetch_article
+    html = """
+    <html><body>
+        <div class="page-wrap">Site chrome here that should be excluded</div>
+        <div class="article-body">
+            <h1>Class-Based Layout</h1>
+            <p>The real content lives in this div.</p>
+        </div>
+    </body></html>
+    """
+    mock_resp = MagicMock()
+    mock_resp.text = html
+    mock_resp.raise_for_status = MagicMock()
+    with patch('agents.seed_agent.requests.get', return_value=mock_resp):
+        headline, text = _fetch_article('https://example.com/article')
+
+    assert headline == 'Class-Based Layout'
+    assert 'real content lives in this div' in text
+    assert 'Site chrome here' not in text
+
+
+def test_fetch_article_returns_empty_on_error():
+    from agents.seed_agent import _fetch_article
+    with patch('agents.seed_agent.requests.get', side_effect=Exception('network down')):
+        headline, text = _fetch_article('https://example.com/article')
+    assert headline == ''
+    assert text == ''

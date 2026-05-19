@@ -3,11 +3,22 @@ import os
 import re
 import requests
 import spacy
+from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
 nlp = spacy.load('en_core_web_sm')
+
+# Tags that never contain article content — stripped before text extraction
+_NOISE_TAGS = ('script', 'style', 'nav', 'header', 'footer', 'aside', 'form', 'noscript', 'iframe')
+# Common class/id patterns used by major news sites for the article body
+_BODY_PATTERN = re.compile(
+    r'(article|post|story|entry|news|main)[-_]?(body|content|text|wrap)|story[-_]?content',
+    re.IGNORECASE,
+)
+# Cap on words returned to keep LLM token budget predictable downstream
+_MAX_WORDS = 300
 
 GDELT_URL   = 'https://api.gdeltproject.org/api/v2/doc/doc'
 NEWSAPI_URL = 'https://newsapi.org/v2/everything'
@@ -25,15 +36,54 @@ def _outlet_from_url(url: str) -> str:
     return domain.split('.')[0].capitalize()
 
 
-def _fetch_text(url: str) -> str:
-    """Fetch raw page text (first 300 words). Returns '' on any error."""
+def _fetch_article(url: str) -> tuple[str, str]:
+    """Fetch (headline, body_text) from a news URL.
+
+    Uses BeautifulSoup with priority selectors: <article> > <main> > class-pattern
+    matching common article-body conventions > <body>. Strips scripts/nav/ads/etc.
+    Returns ('', '') on any error.
+    """
     try:
-        r = requests.get(url, timeout=8, headers={'User-Agent': 'StoryTrace/1.0'})
+        r = requests.get(url, timeout=10, headers={'User-Agent': 'StoryTrace/1.0'})
         r.raise_for_status()
-        words = r.text.split()[:300]
-        return ' '.join(words)
+        soup = BeautifulSoup(r.text, 'html.parser')
+
+        # Strip non-content tags before extraction
+        for tag in soup(list(_NOISE_TAGS)):
+            tag.decompose()
+
+        # Headline: og:title (most reliable) → <h1> → <title>
+        headline = ''
+        og = soup.find('meta', attrs={'property': 'og:title'})
+        if og and og.get('content'):
+            headline = og['content'].strip()
+        if not headline:
+            h1 = soup.find('h1')
+            if h1:
+                headline = h1.get_text(strip=True)
+        if not headline and soup.title:
+            headline = soup.title.get_text(strip=True)
+
+        # Body: <article> → <main> → class-pattern match → <body> → whole doc
+        body = (
+            soup.find('article')
+            or soup.find('main')
+            or soup.find(attrs={'class': _BODY_PATTERN})
+            or soup.find(attrs={'id': _BODY_PATTERN})
+            or soup.body
+            or soup
+        )
+        text = body.get_text(separator=' ', strip=True)
+        words = text.split()[:_MAX_WORDS]
+        return headline, ' '.join(words)
     except Exception:
-        return ''
+        return '', ''
+
+
+def _fetch_text(url: str) -> str:
+    """Backwards-compatible wrapper that returns only the article body text."""
+    _, text = _fetch_article(url)
+    return text
 
 
 def query_gdelt(query: str) -> dict | None:
@@ -85,20 +135,24 @@ def run(state: dict) -> dict:
     # --- Direct URL input: treat the URL itself as the root story ---
     if _is_url(user_input):
         logger.info('[%s] Input is a URL — fetching root story directly', job_id)
-        text = _fetch_text(user_input)
-        entities = _extract_entities(text) or [_outlet_from_url(user_input)]
+        headline, text = _fetch_article(user_input)
+
+        # Extract entities preferring headline (denser signal), fall back to body
+        ner_source = (headline + ' ' + text) if headline else text
+        entities = _extract_entities(ner_source) or [_outlet_from_url(user_input)]
         logger.info('[%s] Entities extracted: %s', job_id, entities)
         state['entities'] = entities
         state['root'] = {
             'outlet':    _outlet_from_url(user_input),
             'country':   'US',
             'url':       user_input,
-            'headline':  '',
+            'headline':  headline,
             'text':      text,
             'published': '',
             'dna':       {},
         }
-        logger.info('[%s] seed_agent done — root outlet: %s', job_id, state['root']['outlet'])
+        logger.info('[%s] seed_agent done — root: "%s" @ %s',
+                    job_id, headline[:80], state['root']['outlet'])
         return state
 
     # --- Topic input: extract entities then query GDELT → NewsAPI ---
