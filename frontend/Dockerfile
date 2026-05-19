@@ -1,9 +1,10 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install deps first (cached layer — only re-runs when package.json changes)
-# Sample docketfile, frontend not implemented yet, 
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 COPY package*.json ./
 RUN npm install
 
@@ -11,4 +12,5 @@ COPY . .
 
 RUN npm run build
 
+EXPOSE 3000
 CMD ["npm", "start"]
