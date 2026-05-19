@@ -111,16 +111,17 @@ App runs at [http://localhost:3000](http://localhost:3000).
 
 ## Full Stack with Docker
 
+**Local development:**
+
 ```bash
-# Start all services (PostgreSQL, API, frontend)
-docker-compose up -d
-
-# Stream backend logs
-docker-compose logs -f api
-
-# Stop everything
-docker-compose down
+docker compose up -d
+docker compose logs -f api
+docker compose down
 ```
+
+**Hackathon (fastest):** see [deploy/HACKATHON.md](deploy/HACKATHON.md) — Render Blueprint, ~20 min, free tier.
+
+**Production (VPS):** see [deploy/DEPLOY.md](deploy/DEPLOY.md) for Vultr/Ubuntu + Nginx + `docker-compose.prod.yml`.
 
 The database schema is applied automatically on first startup.
 
