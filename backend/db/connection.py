@@ -1,14 +1,51 @@
 import json
 import logging
 import os
+from pathlib import Path
 
 import psycopg2
+from psycopg2 import errors as pg_errors
 
 logger = logging.getLogger(__name__)
+
+_schema_ready = False
 
 
 def get_conn():
     return psycopg2.connect(os.environ['DATABASE_URL'])
+
+
+def ensure_schema():
+    """Run migrations.sql once at startup (idempotent for Render/Railway deploys)."""
+    global _schema_ready
+    if _schema_ready:
+        return
+    if not os.environ.get('DATABASE_URL'):
+        logger.warning('DATABASE_URL not set — skipping schema migration')
+        return
+
+    migrations = Path(__file__).parent / 'migrations.sql'
+    statements: list[str] = []
+    buf: list[str] = []
+    for line in migrations.read_text().splitlines():
+        if line.strip().startswith('--') or not line.strip():
+            continue
+        buf.append(line)
+        if line.rstrip().endswith(';'):
+            statements.append('\n'.join(buf))
+            buf = []
+
+    with get_conn() as conn:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            for stmt in statements:
+                try:
+                    cur.execute(stmt)
+                except (pg_errors.DuplicateTable, pg_errors.DuplicateObject, pg_errors.DuplicateSchema):
+                    pass
+
+    _schema_ready = True
+    logger.info('Database schema ready')
 
 
 def save_story(job_id: str, topic: str | None, url: str | None):

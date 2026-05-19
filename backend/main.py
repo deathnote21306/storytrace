@@ -10,7 +10,7 @@ from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.models import AnalyzeRequest, AnalyzeResponse, StoryResponse
-from backend.db.connection import save_story, update_story, get_story, get_recent
+from backend.db.connection import save_story, update_story, get_story, get_recent, ensure_schema
 from backend.orchestrator import run_pipeline
 
 logging.basicConfig(
@@ -21,6 +21,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="StoryTrace API")
+
+
+@app.on_event("startup")
+def _startup():
+    ensure_schema()
+
 
 _cors_origins = os.environ.get(
     "CORS_ORIGINS",
