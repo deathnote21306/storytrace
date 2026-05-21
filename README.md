@@ -1,241 +1,113 @@
-# StoryTrace — Git for News
+# StoryTrace
 
-> Track how a news story mutates, drifts, and branches across 15+ global outlets — visualized as a Git commit tree.
+**StoryTrace** is a web application for tracking how a news story changes as it moves across outlets, countries, and media ecosystems.
 
----
+Live demo: [https://storytrace-web.onrender.com/](https://storytrace-web.onrender.com/)
 
-## What Is StoryTrace?
+## What It Does
 
-When a major event happens — a military strike, an election result, a financial collapse — the story doesn't stay the same. It starts as a wire dispatch from AP or Reuters and, within hours, has been rewritten by dozens of outlets across the world. Facts get dropped. Quotes get reframed. Headlines shift from neutral to alarming. A story that started as "ceasefire talks stall" becomes "diplomacy collapses" in one country, and "peace process on track" in another.
+StoryTrace works like **Git for news**. A user can enter a news topic or article URL, and the app traces how that story evolves across different sources.
 
-**StoryTrace is the first system that tracks this mutation end-to-end.**
+The platform is designed to help users understand:
 
-You paste any article URL — or simply speak a topic — and StoryTrace:
+- where a story may have started;
+- which outlets are reporting on the same narrative;
+- how facts, framing, or emphasis shift between versions;
+- how much each version appears to drift from the original story;
+- how the narrative spreads visually across a tree or map-style interface.
 
-1. Finds the **original wire story** (the root of the narrative)
-2. **Crawls 15+ global outlets** to find every version of that story
-3. Extracts the **narrative DNA** of each version: who are the actors, what are the core claims, what facts were added or removed
-4. **Scores narrative drift** from 0 to 100 — how far has this outlet's version drifted from the original facts
-5. **Visualizes the full mutation chain** as a Git commit tree — root commit (wire source) → country branches → outlet leaves — with clickable diff panels showing exactly what changed at each node
-6. **Fires alerts** when any outlet exceeds a drift threshold of 70, enabling real-time monitoring of misinformation spread
+## What It Is For
 
-The analogy to Git is precise and intentional. Just as Git tracks every change to code, shows who made it, and lets you diff any two versions, StoryTrace tracks every change to a narrative, shows which outlet caused each mutation, and lets you compare any two outlet versions side-by-side.
+StoryTrace is useful for journalists, researchers, analysts, students, and readers who want to compare coverage instead of reading one article in isolation.
 
----
+The goal is not just to summarize the news. The goal is to make narrative change visible: what was added, what was removed, what was reframed, and how different outlets shape the same event over time.
 
-## Why This Matters
+## Core Features
 
-### The Problem No One Has Solved
+- Submit a news URL or topic to start a trace.
+- Run an AI-assisted backend pipeline that searches, compares, translates, and scores related stories.
+- Visualize story drift through an interactive dashboard.
+- Compare versions through narrative difference panels.
+- Explore country and outlet-level views of a story.
+- Use voice input for topic submission.
+- Store analyzed stories and retrieve recent traces.
 
-Misinformation research has historically been reactive: fact-checkers identify false claims after they've already spread. Existing tools (NewsGuard, AllSides, Ground News) rate outlets by general bias but have **no memory of how a specific story evolves over time**. They tell you an outlet leans left — they cannot tell you that this outlet, on this story, dropped three key facts and added two unverified claims.
+## Technology Stack
 
-Two research papers published in late 2024 and early 2025 explicitly identify this gap:
+### Frontend
 
-- **Fine-grained Narrative Classification in Biased News Articles** (arXiv:2512.03582, Dec 2025) — identifies that no temporal, cross-outlet, cross-country narrative tracking system exists
-- **Media Bias Detector** (arXiv:2502.06009, Feb 2025) — analyzes one article at a time with no relational or temporal memory
+- **Next.js**
+- **React**
+- **TypeScript**
+- **Tailwind CSS**
+- **D3.js**
+- **react-globe.gl**
 
-StoryTrace is the answer to the gap both papers describe.
+### Backend
 
-### Who Needs This
+- **Python**
+- **FastAPI**
+- **Uvicorn**
+- **LangGraph**
+- **Pydantic**
+- **PostgreSQL**
+- **psycopg2**
 
-| User | How They Use It |
-|---|---|
-| **Journalists** | Trace a story back to its wire source; see which outlets diverged and when |
-| **Intelligence analysts** | Monitor how a geopolitical narrative spreads and mutates across countries in real-time |
-| **Newsrooms** | Know immediately when a competitor outlet makes a factual departure from the established record |
-| **Media researchers** | Study narrative contagion patterns at scale, with structured drift scores rather than manual annotation |
-| **Citizens** | Understand, at a glance, whether the article they're reading is close to the source or heavily mutated |
+### AI, NLP, And Data
 
-### Why the Git Metaphor Works
+- **spaCy** for local NLP and named entity recognition
+- **langdetect** for language detection
+- **Google Gemini** for translation and forecasting flows
+- **OpenAI-compatible APIs** for agent workflows
+- **RSS feeds, GDELT, and NewsAPI-style sources** for news discovery
 
-Version control is universally understood by technical audiences and increasingly by the general public. The metaphor carries the right cognitive load:
+### Deployment
 
-- **Root commit** = original wire story
-- **Branch** = country or media ecosystem
-- **Commit** = each outlet's rewrite
-- **Diff** = the facts added, changed, or dropped
-- **Drift score** = how many lines changed, in semantic terms
+- **Docker**
+- **Docker Compose**
+- **Render**
+- **Nginx deployment configuration**
 
-This isn't just a visual choice — it's a conceptual framework that makes narrative mutation legible.
+## Project Structure
 
----
-
-## How It Works: The Agent Pipeline
-
-StoryTrace runs a **LangGraph orchestration pipeline** of 7 specialized AI agents. Each agent is responsible for exactly one task, and they pass structured JSON state between them. This design is intentional: no single LLM handles everything. Instead, the right tool is used for each job.
-
-```
-User (URL or Voice)
-        │
-        ├── [Speechmatics WebSocket] — voice → text
-        │
-        ▼
-FastAPI  POST /analyze
-        │
-        ▼
-LangGraph Orchestrator
-        │
-        ├── Agent 1: Story Seed      → GDELT API
-        │   Finds the original wire story from the given URL or topic.
-        │   Queries GDELT to locate the earliest known version.
-        │
-        ├── Agent 2: Crawler         → 15 RSS feeds + spaCy NER
-        │   Fetches all outlet versions of the story.
-        │   Uses spaCy Named Entity Recognition locally (zero token cost)
-        │   to filter irrelevant articles before any LLM call.
-        │
-        ├── Agent 3: DNA Extractor   → Featherless API (Mistral-7B)
-        │   Extracts the "narrative DNA" of each article:
-        │   actors, core claims, key facts. Structured JSON output.
-        │   Only the first 300 words per article are sent to the LLM.
-        │
-        ├── Agent 4: Translator      → Google Gemini Flash
-        │   Translates non-English articles before DNA extraction.
-        │   Handles multi-language coverage of global stories.
-        │
-        ├── Agent 5: Drift Scorer    → Python math + DNA comparison
-        │   Computes a 0–100 drift score by comparing each outlet's
-        │   DNA against the root story's DNA. Measures semantic
-        │   divergence: facts added, facts dropped, framing shifts.
-        │
-        ├── Agent 6: Geo-Branch Builder → PostgreSQL
-        │   Assembles the full commit tree by outlet and country.
-        │   Persists the tree structure and drift history to the DB.
-        │
-        └── Agent 7: Alert Agent     → Webhook / email
-            Fires an alert when any outlet's drift score exceeds 70.
-            Enables real-time monitoring without manual polling.
-        │
-        ▼
-PostgreSQL (stories, outlet_versions, drift history)
-        │
-        ▼
-Next.js Dashboard
-        ├── D3.js Git Commit Tree  ←  main visualization
-        ├── Facts Diff Panel (click any node to see exact changes)
-        └── Impact Forecast Panel  ←  Gemini Pro (on-demand)
+```text
+storytrace/
+├── agents/              # Specialized AI/NLP pipeline agents
+├── backend/             # FastAPI API, orchestration, database access
+├── deploy/              # Deployment notes and server config
+├── frontend/            # Next.js web application
+├── tests/               # Backend and agent tests
+├── docker-compose.yml   # Local multi-service setup
+├── render.yaml          # Render backend deployment config
+└── render.frontend.yaml # Render frontend deployment config
 ```
 
-### Token Efficiency
+## How It Works
 
-The pipeline is designed to minimize LLM cost:
+1. The user submits a topic or article URL from the web interface.
+2. The frontend sends the request to the FastAPI backend.
+3. The backend starts a background analysis job.
+4. A LangGraph-based pipeline coordinates multiple agents.
+5. The agents gather related articles, extract narrative details, translate where needed, and calculate drift scores.
+6. Results are saved to PostgreSQL.
+7. The frontend displays the story trace, visualizations, and comparison panels.
 
-- spaCy NER runs **locally** — zero tokens, filters articles before any LLM call
-- RSS headline matching runs **locally** — zero tokens
-- Only the **first 300 words** of each matched article are sent to the LLM
-- Featherless does **structured JSON extraction**, not open-ended summarization
-- Total cost: ~4,000–6,000 tokens per full pipeline run
+## Local Development
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Backend | Python 3.14.3 + FastAPI + Uvicorn |
-| Agent pipeline | LangGraph StateGraph (7 agents) |
-| NLP (local) | spaCy `en_core_web_sm` + langdetect |
-| DNA extraction | Featherless API (Mistral-7B) |
-| Translation | Google Gemini Flash |
-| Forecasting | Google Gemini Pro |
-| Database | PostgreSQL 15 + psycopg2 |
-| Frontend | Next.js 14 + TypeScript + Tailwind CSS |
-| Visualization | D3.js v7 |
-| Voice input | Speechmatics real-time WebSocket |
-| Data sources | GDELT API, NewsAPI, 15 RSS feeds |
-| Deployment | Docker Compose + Nginx + Render / Vultr |
-
----
-
-## Prerequisites
-
-- Python 3.14.3+
-- Node.js 18+
-- PostgreSQL 15+
-
----
-
-## Environment Setup
-
-Copy the example env file and fill in your API keys:
+### Backend
 
 ```bash
-cp .env.example .env
-```
-
-Open `.env` and set the following:
-
-| Variable | Where to get it |
-|---|---|
-| `DATABASE_URL` | Your local or hosted PostgreSQL connection string |
-| `NEWSAPI_KEY` | [newsapi.org](https://newsapi.org) |
-| `FEATHERLESS_API_KEY` | [featherless.ai](https://featherless.ai) |
-| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com) |
-| `WEBHOOK_URL` | Any endpoint to receive high-drift alerts (optional) |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` for local dev |
-| `SPEECHMATICS_KEY` | [Speechmatics](https://speechmatics.com) — **never use `NEXT_PUBLIC_` prefix** |
-
----
-
-## Backend Setup
-
-```bash
-# Create and activate virtual environment
 python -m venv venv
 source venv/bin/activate
-
-# Install Python dependencies
 pip install -r requirements.txt
-
-# Download the spaCy English model (required by seed_agent and crawler_agent)
-python -m spacy download en_core_web_sm
-```
-
-### Initialize the Database
-
-Make sure PostgreSQL is running and `DATABASE_URL` is set in `.env`, then:
-
-```bash
-psql $DATABASE_URL -f backend/db/migrations.sql
-```
-
-This creates the `stories` and `outlet_versions` tables plus three indexes. Safe to re-run on a fresh database; will error if tables already exist — use `DROP TABLE` first to reset.
-
-### Run the Backend
-
-```bash
 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Verify it's running:
+The backend health check is available at:
 
-```bash
-curl http://localhost:8000/health
-# {"status": "ok"}
-```
+[http://localhost:8000/health](http://localhost:8000/health)
 
-Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
-
----
-
-## Running Tests
-
-```bash
-source venv/bin/activate
-python -m pytest tests/ -v
-
-# Single file
-python -m pytest tests/test_seed_agent.py -v
-
-# Single test
-python -m pytest tests/test_seed_agent.py::test_run_with_topic_uses_gdelt -v
-```
-
-All external calls are mocked — no running services or API keys required.
-
----
-
-## Frontend Setup
+### Frontend
 
 ```bash
 cd frontend
@@ -243,60 +115,44 @@ npm install
 npm run dev
 ```
 
-App runs at [http://localhost:3000](http://localhost:3000).
+The frontend runs locally at:
 
----
+[http://localhost:3000](http://localhost:3000)
 
-## Full Stack with Docker
+## Environment Variables
 
-**Local development:**
+The project expects environment variables for the API, database, and external AI/news services.
 
-```bash
-docker compose up -d
-docker compose logs -f api
-docker compose down
-```
+Common variables include:
 
-**Hackathon (fastest):** see [deploy/HACKATHON.md](deploy/HACKATHON.md) — Render Blueprint, ~20 min, free tier.
+- `DATABASE_URL`
+- `NEXT_PUBLIC_API_URL`
+- `CORS_ORIGINS`
+- `NEWSAPI_KEY`
+- `GEMINI_API_KEY`
+- `OPENAI_API_KEY` or compatible provider keys
+- `SPEECHMATICS_KEY`
+- `WEBHOOK_URL`
 
-**Production (VPS):** see [deploy/DEPLOY.md](deploy/DEPLOY.md) for Vultr/Ubuntu + Nginx + `docker-compose.prod.yml`.
+Do not expose private API keys in frontend `NEXT_PUBLIC_` variables unless they are explicitly safe for browser use.
 
-The database schema is applied automatically on first startup.
+## Testing
 
----
-
-## API Reference
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/analyze` | Submit a URL or topic; returns `job_id` and `poll_url` (202) |
-| `GET` | `/story/{job_id}` | Poll for results; returns full tree JSON when `status == "complete"` |
-| `GET` | `/story/recent` | Returns the 10 most recently completed stories |
-| `POST` | `/forecast/{job_id}` | Gemini Pro world-impact forecast (optional, runs after pipeline completes) |
-| `GET` | `/health` | Health check |
-
-### Example: submit a topic and poll for results
+Backend tests are located in `tests/`.
 
 ```bash
-# Submit
-curl -X POST http://localhost:8000/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"topic": "Iran nuclear talks"}'
-
-# Poll (replace <job_id> with the value returned above)
-curl http://localhost:8000/story/<job_id>
+pytest
 ```
 
----
+Frontend build verification:
 
-## Origin
+```bash
+cd frontend
+npm run build
+```
 
-StoryTrace was conceived and built during a hackathon. The core concept — applying version control semantics to track narrative mutation across global media — originated from the observation that while software engineers have Git to audit every change to a codebase, journalists and citizens have no equivalent tool to audit every change to a story.
+## Demo
 
-The project targets four hackathon tracks: Agentic Workflows, Collaborative Multi-Agent Systems, Enterprise Utility, and Intelligent Reasoning.
+Try the live version here:
 
----
-
-## License
-
-MIT
+[https://storytrace-web.onrender.com/](https://storytrace-web.onrender.com/)
